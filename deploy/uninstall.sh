@@ -22,6 +22,8 @@ if [[ -z "$ROOT" ]]; then
 fi
 rm -f -- "$(path /etc/systemd/system/opencode-image-cleanup.timer)" "$(path /etc/systemd/system/opencode-image-cleanup.service)" "$(path /etc/systemd/system/opencode.service)" "$(path /etc/systemd/system/opencode-web.service)" "$(path /etc/systemd/system/opencode-auth.service)"
 rm -rf -- "$(path /opt/opencode)" "$(path /var/lib/opencode-web)"
+# Remote keenable_search has no local daemon/files beyond /etc/opencode config and rules.
+# Default uninstall retains MCP settings for reinstall; --purge removes them with /etc/opencode.
 if ((purge)); then
   rm -rf -- "$(path /var/lib/opencode)" "$(path /var/cache/opencode)" "$(path /var/lib/opencode-auth)" "$(path /var/lib/opencode-images)" "$(path /etc/opencode)"
 fi

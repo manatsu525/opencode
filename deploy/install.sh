@@ -154,6 +154,7 @@ if [[ -d "$(path /opt/opencode/frontend)" ]]; then
   mv "$(path /opt/opencode/frontend)" "$(path /opt/opencode/backups)/frontend-$(date +%Y%m%d-%H%M%S)-$$"
 fi
 mv "$tmp/frontend" "$(path /opt/opencode/frontend)"
+# Render also merges image_search + keyless remote keenable_search and their global fallback rules.
 python3 "$HERE/render.py" "$ROOT" "$host" "$port" "$backend_port" "$workspace" "$tmp/login.json" "$CERT_DAYS" "$auth_port"
 if [[ -n "$ROOT" ]]; then
   mkdir -p "$(path /var/lib/opencode/workspace)"

@@ -179,3 +179,12 @@ python3 deploy/test_deploy.py --frontend /path/to/frontend.tar.gz   --backend /p
 - DOM 回归命令：`cd packages/app && bun test --conditions=browser --preload ./happydom.ts --preload ./test-browser/solid-dom-preload.ts ./test-browser/mobile-settings-context.test.ts ./test-browser/images-and-mobile-zoom.test.ts`。DOM 夹具不等同真实手机几何截图，仍需真实浏览器验证每个标签、圆环和图片。
 
 下载图片缓存保留 7 天，每日 systemd timer 自动清理；聊天记录中的内嵌 FilePart 不属于缓存文件，不删除会话数据库。过期的同源图片链接可能失效。卸载会停止并移除 timer/service；--purge 删除整个本部署图片缓存。
+
+
+## Keenable 网页搜索后备（免 Key）
+
+- 内置 `websearch` 保持首选；报错、超时、限流或没有有效结果时，全局 `IMAGE_SEARCH.md` 中的硬规则要求调用 `keenable_search_search_web_pages`。成功主搜索不重复调用；图片搜索保持独立。
+- 通过官方支持的远程 MCP 注册 `keenable_search`：`https://api.keenable.ai/mcp-public`，Streamable HTTP，`oauth: false`，仅发送应用标识 `X-Keenable-Title: opencode-manatsu`，无密钥、账号、付费或本地额外服务。官方后端二进制不修改。该 MCP 另提供 `fetch_page_content`；本功能仅测试网页搜索。
+- 官方公开限额：出口 IP 共享，每个端点每小时 1,000 请求、每秒最多 10 次；`429` 遵守 `Retry-After`。这不是带账号的每月 100K 免费额度，也没有独占配额或可用性保证；搜索词会发往 Keenable，勿包含秘密。
+- 旧 dsh-custom 使用 `https://api.keenable.ai/mcp`（并有 `/v1/search/public` REST 回退）；本部署使用官方为免 Key 预设推荐的 `/mcp-public`，避免 OAuth 发现误提示登录。参考：https://docs.keenable.ai/mcp-server 、https://docs.keenable.ai/rate-limits 。
+- 安装/重装幂等合并 MCP 与全局规则，保留其他 MCP、权限及 provider.env。卸载默认保留 `/etc/opencode` 中的定义和规则以供重装；`--purge` 删除。远程 MCP 无额外本地进程、端口或清理定时器。

@@ -15,6 +15,8 @@ with tempfile.TemporaryDirectory(prefix="opencode-deploy-test-") as temp:
     command=["bash",str(here/"install.sh"),"--host","127.0.0.1","--frontend-archive",str(pathlib.Path(args.frontend).resolve()),"--frontend-sha256",sha,"--backend-archive",str(pathlib.Path(args.backend).resolve())]
     def install():subprocess.run(command,env=env,check=True,stdout=subprocess.DEVNULL)
     install()
+    config_path=root/"etc/opencode/opencode.json"
+    check("keyless Keenable remote installed with OAuth disabled", json.loads(config_path.read_text())["mcp"]["keenable_search"]["oauth"] is False)
     check("installer/uninstaller retained",(root/"opt/opencode/deploy/uninstall.sh").is_file())
     credential=root/"etc/opencode/server.env";secret_hash=hashlib.sha256(credential.read_bytes()).hexdigest();cert_hash=hashlib.sha256((root/"etc/opencode/tls/cert.pem").read_bytes()).hexdigest()
     check("root-only credential mode",credential.stat().st_mode&0o777==0o600)
@@ -70,10 +72,12 @@ with tempfile.TemporaryDirectory(prefix="opencode-deploy-test-") as temp:
     secret_hash = hashlib.sha256(credential.read_bytes()).hexdigest()
     subprocess.run(["bash",str(here/"uninstall.sh"),"--yes"],env=env,check=True,stdout=subprocess.DEVNULL)
     check("default uninstall preserves data and credentials",credential.exists() and (root/"var/lib/opencode").exists())
+    check("default uninstall retains remote MCP and global fallback rules", "keenable_search" in json.loads(config_path.read_text())["mcp"] and (root/"etc/opencode/IMAGE_SEARCH.md").exists())
     check("uninstall removes binaries and units",not (root/"opt/opencode").exists() and not (root/"etc/systemd/system/opencode.service").exists())
     install()
     check("reinstall preserves password",hashlib.sha256(credential.read_bytes()).hexdigest()==secret_hash)
     subprocess.run(["bash",str(here/"uninstall.sh"),"--yes","--purge"],env=env,check=True,stdout=subprocess.DEVNULL)
+    check("purge removes Keenable config and fallback rules", not config_path.exists() and not (root/"etc/opencode/IMAGE_SEARCH.md").exists())
     check("purge removes app data/credentials",not (root/"etc/opencode").exists() and not (root/"var/lib/opencode").exists())
     bad=pathlib.Path(temp)/"bad.tar.gz"
     with tarfile.open(bad,"w:gz") as tf:
