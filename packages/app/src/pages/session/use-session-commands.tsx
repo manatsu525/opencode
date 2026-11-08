@@ -28,6 +28,7 @@ export type SessionCommandContext = {
   focusInput: () => void
   review?: () => boolean
   fileBrowser?: () => boolean
+  terminalAvailable?: () => boolean
 }
 
 const withCategory = (category: string) => {
@@ -48,6 +49,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   const settings = useSettings()
   const sync = useSync()
   const terminal = useTerminal()
+  const terminalAvailable = actions.terminalAvailable ?? (() => true)
   const layout = useLayout()
   const local = useLocal()
   const navigate = useNavigate()
@@ -206,6 +208,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   }
 
   const openTerminal = () => {
+    if (!terminalAvailable()) return
     if (terminal.all().length > 0) terminal.new({ focus: true })
     if (terminal.all().length === 0) terminal.requestFocus()
     view().terminal.open()
@@ -438,7 +441,9 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       title: language.t("command.terminal.toggle"),
       keybind: "ctrl+`",
       slash: "terminal",
+      disabled: !terminalAvailable(),
       onSelect: () => {
+        if (!terminalAvailable()) return
         if (view().terminal.opened()) {
           terminal.cancelFocus()
           view().terminal.close()
@@ -486,6 +491,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       title: language.t("command.terminal.new"),
       description: language.t("command.terminal.new.description"),
       keybind: "ctrl+alt+t",
+      disabled: !terminalAvailable(),
       onSelect: openTerminal,
     }),
   ]
