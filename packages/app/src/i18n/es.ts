@@ -604,6 +604,12 @@ export const dict = {
   "context.stats.lastActivity": "Última actividad",
 
   "context.usage.tokens": "Tokens",
+  "context.usage.sessionInput": "Session input",
+  "context.usage.sessionOutput": "Session output",
+  "context.usage.sessionReasoning": "Session reasoning",
+  "context.usage.sessionCacheRead": "Session cache read",
+  "context.usage.sessionCacheWrite": "Session cache write",
+  "context.usage.sessionCacheHitRate": "Session cache hit rate",
   "context.usage.usage": "Uso",
   "context.usage.cost": "Costo",
   "context.usage.clickToView": "Haz clic para ver contexto",

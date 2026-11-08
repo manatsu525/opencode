@@ -612,6 +612,12 @@ export const dict = {
   "context.stats.lastActivity": "Aktivitas Terakhir",
 
   "context.usage.tokens": "Token",
+  "context.usage.sessionInput": "Session input",
+  "context.usage.sessionOutput": "Session output",
+  "context.usage.sessionReasoning": "Session reasoning",
+  "context.usage.sessionCacheRead": "Session cache read",
+  "context.usage.sessionCacheWrite": "Session cache write",
+  "context.usage.sessionCacheHitRate": "Session cache hit rate",
   "context.usage.usage": "Penggunaan",
   "context.usage.cost": "Biaya",
   "context.usage.clickToView": "Klik untuk melihat konteks",

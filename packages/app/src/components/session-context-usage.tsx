@@ -13,7 +13,7 @@ import { useSync } from "@/context/sync"
 import { useLanguage } from "@/context/language"
 import { useProviders } from "@/hooks/use-providers"
 import { useSDK } from "@/context/sdk"
-import { getSessionContext } from "@/components/session/session-context-metrics"
+import { getSessionContext, getSessionTokenUsage } from "@/components/session/session-context-metrics"
 import { useSessionLayout } from "@/pages/session/session-layout"
 import { createSessionTabs } from "@/pages/session/helpers"
 import { useSettings } from "@/context/settings"
@@ -66,17 +66,17 @@ export function SessionContextUsage(props: SessionContextUsageProps) {
   const messages = createMemo(() => (params.id ? (sync().data.message[params.id] ?? []) : []))
   const info = createMemo(() => (params.id ? sync().session.get(params.id) : undefined))
 
-  const usd = createMemo(
-    () =>
-      new Intl.NumberFormat(language.intl(), {
-        style: "currency",
-        currency: "USD",
-      }),
-  )
-
   const context = createMemo(() => getSessionContext(messages(), [...providers.all().values()]))
-  const cost = createMemo(() => {
-    return usd().format(info()?.cost ?? 0)
+  const tokenUsage = createMemo(() => getSessionTokenUsage(
+    messages(),
+    params.id && sync().session.history.more(params.id) ? info()?.tokens : undefined,
+  ))
+  const tokenNumber = (value: number) => value.toLocaleString(language.intl())
+  const cacheHitRate = createMemo(() => {
+    const rate = tokenUsage().cacheHitRate
+    return rate === null ? "-" : new Intl.NumberFormat(language.intl(), {
+      style: "percent", minimumFractionDigits: 1, maximumFractionDigits: 1,
+    }).format(rate)
   })
   const contextVisible = createMemo(() => view().reviewPanel.opened() && tabState.activeTab() === "context")
   const hasOtherTabs = createMemo(() =>
@@ -127,13 +127,18 @@ export function SessionContextUsage(props: SessionContextUsageProps) {
   )
 
   const tooltipValue = (mobile = false) => (
-    <div class={mobile ? "flex w-full flex-col gap-3" : "flex w-[120px] flex-col gap-2"}>
-      <ContextTooltipRow name={language.t("context.usage.cost")} value={cost()} />
+    <div class={mobile ? "flex w-full flex-col gap-3" : "flex w-[280px] max-w-[calc(100vw-24px)] flex-col gap-2"}>
       <ContextTooltipRow name={language.t("context.usage.usage")} value={`${context()?.usage ?? 0}%`} />
       <ContextTooltipRow
         name={language.t("context.usage.tokens")}
         value={context()?.total.toLocaleString(language.intl()) ?? "0"}
       />
+      <ContextTooltipRow name={language.t("context.usage.sessionInput")} value={tokenNumber(tokenUsage().input)} />
+      <ContextTooltipRow name={language.t("context.usage.sessionOutput")} value={tokenNumber(tokenUsage().output)} />
+      <ContextTooltipRow name={language.t("context.usage.sessionReasoning")} value={tokenNumber(tokenUsage().reasoning)} />
+      <ContextTooltipRow name={language.t("context.usage.sessionCacheRead")} value={tokenNumber(tokenUsage().cache.read)} />
+      <ContextTooltipRow name={language.t("context.usage.sessionCacheWrite")} value={tokenNumber(tokenUsage().cache.write)} />
+      <ContextTooltipRow name={language.t("context.usage.sessionCacheHitRate")} value={cacheHitRate()} />
     </div>
   )
 

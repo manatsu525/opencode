@@ -507,6 +507,12 @@ export const dict = {
   "context.stats.lastActivity": "Siste aktivitet",
 
   "context.usage.tokens": "Tokener",
+  "context.usage.sessionInput": "Session input",
+  "context.usage.sessionOutput": "Session output",
+  "context.usage.sessionReasoning": "Session reasoning",
+  "context.usage.sessionCacheRead": "Session cache read",
+  "context.usage.sessionCacheWrite": "Session cache write",
+  "context.usage.sessionCacheHitRate": "Session cache hit rate",
   "context.usage.usage": "Forbruk",
   "context.usage.cost": "Kostnad",
   "context.usage.clickToView": "Klikk for å se kontekst",

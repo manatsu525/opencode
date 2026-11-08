@@ -594,6 +594,12 @@ export const dict = {
   "context.stats.lastActivity": "最後活動",
 
   "context.usage.tokens": "Token",
+  "context.usage.sessionInput": "累計輸入",
+  "context.usage.sessionOutput": "累計輸出",
+  "context.usage.sessionReasoning": "累計推理",
+  "context.usage.sessionCacheRead": "累計快取讀取",
+  "context.usage.sessionCacheWrite": "累計快取寫入",
+  "context.usage.sessionCacheHitRate": "會話快取命中率",
   "context.usage.usage": "使用量",
   "context.usage.cost": "成本",
   "context.usage.clickToView": "按一下以檢視上下文",

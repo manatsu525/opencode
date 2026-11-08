@@ -8,14 +8,14 @@ import { MobileContextUsage } from "../src/components/session-context-usage-mobi
 
 let cleanup: (() => void) | undefined
 afterEach(() => { cleanup?.(); document.body.innerHTML = "" })
-test("context ring opens on tap, exposes cost/tokens/percentage and closes", async () => {
+test("context ring opens on tap, exposes cache/tokens/percentage and closes", async () => {
   const root = document.createElement("div"); document.body.append(root)
-  cleanup = render(() => createComponent(MobileContextUsage, { title: "Context usage", trigger: "◉", children: "Cost $0.02 · Context 25% · Tokens 32,000" }), root)
+  cleanup = render(() => createComponent(MobileContextUsage, { title: "Context usage", trigger: "◉", children: "Context 25% · Tokens 32,000 · Cache hit rate 66.7%" }), root)
   const button = root.querySelector<HTMLButtonElement>("button[aria-label='Context usage']")!
   expect(button).toBeDefined(); expect(button.className).toContain("size-10")
   button.click(); await new Promise((resolve) => setTimeout(resolve, 20))
   const content = document.querySelector('[data-component="mobile-context-usage"]')!
-  expect(content.textContent).toContain("32,000"); expect(content.textContent).toContain("25%"); expect(content.textContent).toContain("$0.02")
+  expect(content.textContent).toContain("32,000"); expect(content.textContent).toContain("25%"); expect(content.textContent).toContain("66.7%"); expect(content.textContent).not.toContain("$")
   document.querySelector<HTMLButtonElement>('[data-slot="popover-close-button"]')!.click()
   await new Promise((resolve) => setTimeout(resolve, 20))
   expect(button.getAttribute("aria-expanded")).toBe("false")
@@ -56,4 +56,14 @@ test("MCP image FileParts render inline and open the existing zoom viewer", () =
   expect(document.querySelector('[data-media-viewer="image"] img')).toBe(images[0])
   document.querySelector<HTMLButtonElement>('button[aria-label="Close"]')!.click()
   expect(root.querySelector("img")).toBe(images[0])
+})
+
+
+test("both context ring views share cumulative cache statistics and omit cost", () => {
+ const source = readFileSync(new URL("../src/components/session-context-usage.tsx", import.meta.url), "utf8")
+ for (const key of ["sessionInput", "sessionOutput", "sessionReasoning", "sessionCacheRead", "sessionCacheWrite", "sessionCacheHitRate"]) expect(source).toContain(`context.usage.${key}`)
+ expect(source).not.toContain('context.usage.cost')
+ expect(source).toContain('tooltipValue(true)'); expect(source).toContain('value={tooltipValue()}')
+ expect(source).toContain('w-[280px]'); expect(source).toContain('minimumFractionDigits: 1')
+ expect(source).toContain('rate === null ? "-"')
 })

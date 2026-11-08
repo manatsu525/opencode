@@ -63,3 +63,20 @@ const build = (messages: Message[] = [], providers: Provider[] = []): Context | 
 export function getSessionContext(messages: Message[] = [], providers: Provider[] = []) {
   return build(messages, providers)
 }
+
+/** Sum all assistant steps, not just the most recent context window. The official
+ * session aggregate supplies the same counters when older history is paginated. */
+export function getSessionTokenUsage(messages: Message[] = [], aggregate?: AssistantMessage["tokens"]) {
+  const tokens = { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } }
+  const add = (value: AssistantMessage["tokens"]) => {
+    tokens.input += value.input ?? 0
+    tokens.output += value.output ?? 0
+    tokens.reasoning += value.reasoning ?? 0
+    tokens.cache.read += value.cache?.read ?? 0
+    tokens.cache.write += value.cache?.write ?? 0
+  }
+  if (aggregate) add(aggregate)
+  else for (const message of messages) if (message.role === "assistant" && message.tokens) add(message.tokens)
+  const inputTotal = tokens.input + tokens.cache.read + tokens.cache.write
+  return { ...tokens, cacheHitRate: inputTotal > 0 ? tokens.cache.read / inputTotal : null }
+}

@@ -597,6 +597,12 @@ export const dict = {
   "context.stats.lastActivity": "กิจกรรมล่าสุด",
 
   "context.usage.tokens": "โทเค็น",
+  "context.usage.sessionInput": "Session input",
+  "context.usage.sessionOutput": "Session output",
+  "context.usage.sessionReasoning": "Session reasoning",
+  "context.usage.sessionCacheRead": "Session cache read",
+  "context.usage.sessionCacheWrite": "Session cache write",
+  "context.usage.sessionCacheHitRate": "Session cache hit rate",
   "context.usage.usage": "การใช้งาน",
   "context.usage.cost": "ต้นทุน",
   "context.usage.clickToView": "คลิกเพื่อดูบริบท",
