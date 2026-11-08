@@ -307,7 +307,11 @@ export function Titlebar(props: { update?: TitlebarUpdate; debugTools?: { visibl
                 const project = global.ensureServerCtx(conn).projects.list()[0]
                 return project ? [{ server: ServerConnection.key(conn), project }] : []
               })[0]
-              if (!fallback) return
+              if (!fallback) {
+                // Empty Home has no directory for a draft yet: make + useful.
+                command.trigger("project.open")
+                return
+              }
 
               tabs.newDraft({ server: fallback.server, directory: fallback.project.worktree }, "")
             }
