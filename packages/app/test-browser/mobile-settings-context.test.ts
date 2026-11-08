@@ -2,6 +2,8 @@ import { afterEach, expect, test } from "bun:test"
 import { createComponent } from "solid-js"
 import { render } from "solid-js/web"
 import { readFileSync } from "node:fs"
+import { ToolImages } from "../../session-ui/src/components/chat-image"
+import type { ToolPart } from "@opencode-ai/sdk/v2"
 import { MobileContextUsage } from "../src/components/session-context-usage-mobile"
 
 let cleanup: (() => void) | undefined
@@ -31,4 +33,27 @@ test("both settings generations select horizontal navigation below 768px with a 
   expect(css).toContain('height: 100dvh'); expect(css).toContain('overflow-x: auto')
   expect(css).toContain('flex-direction: column'); expect(css).toContain('min-height: 44px')
   expect(css).toContain('[data-slot="settings-v2-row-control"]')
+})
+
+
+test("MCP image FileParts render inline and open the existing zoom viewer", () => {
+  const file = process.env.OPENCODE_IMAGE_FIXTURE
+  const part = file ? JSON.parse(readFileSync(file, "utf8")) as ToolPart : {
+    tool: "image_search_search_images", state: { status: "completed", output: "", attachments: [
+      { mime: "image/svg+xml", url: "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='1' height='1'></svg>" },
+    ] },
+  } as ToolPart
+  const root = document.createElement("div"); document.body.append(root)
+  cleanup = render(() => createComponent(ToolImages, { part }), root)
+  const images = root.querySelectorAll<HTMLImageElement>("img[data-chat-image]")
+  expect(images.length).toBe(part.state.status === "completed" ? part.state.attachments!.length : 0)
+  expect(images.length).toBeGreaterThan(0)
+  for (const image of images) {
+    expect(image.src).toStartWith("data:image/")
+    expect(image.getAttribute("referrerpolicy")).toBe("no-referrer")
+  }
+  images[0].click()
+  expect(document.querySelector('[data-media-viewer="image"] img')).toBe(images[0])
+  document.querySelector<HTMLButtonElement>('button[aria-label="Close"]')!.click()
+  expect(root.querySelector("img")).toBe(images[0])
 })

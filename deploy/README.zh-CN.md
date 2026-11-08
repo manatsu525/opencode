@@ -174,6 +174,8 @@ python3 deploy/test_deploy.py --frontend /path/to/frontend.tar.gz   --backend /p
 - 工具附件 FilePart、Markdown 图片、工具输出中的原图 URL 均复用安全的行内图片和缩放查看器。
 - 搜图按 octo 的实际方式实现：预装免 Key 的 **Bing Images MCP** + 全局“必须遵守”规则。自然图片请求由模型调用 `image_search_search_images`，不要求用户写特殊问法。不改官方后端二进制。
 - MCP 下载真实搜索结果原图，Pillow 校验并压缩为最长边 1280px、JPEG 质量 82，剥离原始元数据，返回 MCP image content（官方自动保存成 FilePart）及同源 Markdown URL；前端直接显示附件并可点开缩放。不会用文章 og:image 代替搜图。
-- `/chat-images/<sha256>.jpg` 使用原有 Cookie 登录保护；无 Key、无任意 URL 图片代理。网络仅标准 HTTP(S)，拒绝私网/本机/回环、DNS 固定 IP 并优先 IPv4、每跳重新校验，限制下载 12MiB、像素 2500万、缓存 1GiB。缓存满时不删除历史图片；失败如实返回，Bing 页面格式/站点可用性可能变化。
+- `/chat-images/<sha256>.jpg` 使用原有 Cookie 登录保护；无 Key、无任意 URL 图片代理。网络仅标准 HTTP(S)，拒绝私网/本机/回环、DNS 固定 IP 并优先 IPv4、每跳重新校验，限制下载 12MiB、像素 2500万、缓存 1GiB。缓存满时拒绝新增；每日 opencode-image-cleanup.timer 清理下载超过 7 天的 JPEG 缓存，仅匹配本部署 SHA256 文件名，不跟随符号链接；失败如实返回，Bing 页面格式/站点可用性可能变化。
 - 全局规则 `/etc/opencode/IMAGE_SEARCH.md` 由 config.instructions 加载，MCP 定义合并进 `/etc/opencode/opencode.json`；不覆盖其他 MCP/规则或 provider.env。安装器额外安装 python3-pil；卸载默认保留图片缓存，仅 --purge 删除 `/var/lib/opencode-images`。旧 `/image-preview` 返回 410，不再解析 OG。
 - DOM 回归命令：`cd packages/app && bun test --conditions=browser --preload ./happydom.ts --preload ./test-browser/solid-dom-preload.ts ./test-browser/mobile-settings-context.test.ts ./test-browser/images-and-mobile-zoom.test.ts`。DOM 夹具不等同真实手机几何截图，仍需真实浏览器验证每个标签、圆环和图片。
+
+下载图片缓存保留 7 天，每日 systemd timer 自动清理；聊天记录中的内嵌 FilePart 不属于缓存文件，不删除会话数据库。过期的同源图片链接可能失效。卸载会停止并移除 timer/service；--purge 删除整个本部署图片缓存。

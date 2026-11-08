@@ -115,6 +115,31 @@ TasksMax=64
 [Install]
 WantedBy=multi-user.target
 """)
+write("/etc/systemd/system/opencode-image-cleanup.service", """[Unit]
+Description=Remove OpenCode downloaded image cache older than seven days
+
+[Service]
+Type=oneshot
+User=root
+ExecStart=/usr/bin/python3 /opt/opencode/deploy/cleanup_images.py
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/var/lib/opencode-images
+""")
+write("/etc/systemd/system/opencode-image-cleanup.timer", """[Unit]
+Description=Daily OpenCode image cache expiry
+
+[Timer]
+OnCalendar=daily
+RandomizedDelaySec=15m
+Persistent=true
+Unit=opencode-image-cleanup.service
+
+[Install]
+WantedBy=timers.target
+""")
 p("/var/lib/opencode-auth").mkdir(parents=True, exist_ok=True)
 p("/var/lib/opencode-auth").chmod(0o700)
 api = "agent|api|auth|command|config|doc|event|experimental|file|find|formatter|global|instance|log|lsp|mcp|path|permission|project|provider|pty|question|session|skill|sync|tui|vcs"

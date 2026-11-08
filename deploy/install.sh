@@ -188,6 +188,7 @@ installed_version=$(/opt/opencode/bin/opencode --version)
 runuser -u opencode-web -- nginx -t -p /var/lib/opencode-web/ -c /etc/opencode/nginx.conf
 systemctl daemon-reload
 systemctl enable opencode.service opencode-web.service opencode-auth.service
+systemctl enable --now opencode-image-cleanup.timer
 systemctl restart opencode-auth.service opencode.service
 python3 "$HERE/verify.py" --internal --port "$backend_port"
 if systemctl is-active --quiet opencode-ui-demo.service; then
