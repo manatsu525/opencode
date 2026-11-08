@@ -1623,7 +1623,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       </DockShellForm>
       <Show when={store.mode === "normal" || store.mode === "shell"}>
         <DockTray attach="top">
-          <div class="px-1.75 pt-5.5 pb-2 flex items-center gap-2 min-w-0">
+          <div data-slot="prompt-legacy-toolbar" class="px-1.75 pt-5.5 pb-2 flex items-center gap-2 min-w-0">
             <div class="flex items-center gap-1.5 min-w-0 flex-1 relative">
               <div
                 class="h-7 flex items-center gap-1.5 min-w-0 absolute inset-0"
@@ -1645,7 +1645,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                   {language.t("common.cancel")}
                 </Button>
               </div>
-              <div class="flex items-center gap-1.5 min-w-0 flex-1 h-7">
+              <div data-slot="prompt-legacy-controls" class="flex items-center gap-1.5 min-w-0 flex-1 h-7">
                 <Show when={!agentsLoading()}>
                   <div
                     data-component="prompt-agent-control"

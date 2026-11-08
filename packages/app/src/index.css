@@ -339,3 +339,15 @@ html, body { touch-action: pan-x pan-y; -webkit-text-size-adjust: 100%; }
   }
   [contenteditable]:not([contenteditable="false"]) * { font-size: inherit !important; }
 }
+
+/* Legacy composer: the model is the flexible slot, never the submit hit target. */
+@media (max-width: 767px) {
+  [data-slot="prompt-legacy-controls"] { height: auto; min-height: 40px; flex-wrap: wrap; }
+  [data-slot="prompt-legacy-controls"] [data-component="prompt-model-control"] { min-width: 0; flex: 1 1 112px; }
+  [data-slot="prompt-legacy-controls"] :is([data-component="prompt-agent-control"], [data-component="prompt-variant-control"]) { min-width: 0; max-width: 128px; }
+  [data-slot="prompt-legacy-controls"] [data-component="tooltip-trigger"] { min-width: 0; max-width: 100%; }
+  [data-slot="prompt-legacy-controls"] [data-action="prompt-model"] { width: 100%; max-width: 100%; }
+  [data-slot="prompt-legacy-controls"] button { min-height: 40px; }
+  [data-dock-border-underlay="legacy"] :is([data-action="prompt-attach"], [data-action="prompt-submit"]) { min-width: 40px; min-height: 40px; }
+  [data-dock-border-underlay="legacy"] [data-action="prompt-submit"] { position: relative; z-index: 2; }
+}

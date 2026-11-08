@@ -23,6 +23,7 @@ import type {
 } from "./types"
 import type { PromptInputV2Interaction, PromptInputV2SelectControl } from "./interaction"
 import "./attachments.css"
+import "./footer.css"
 
 export type {
   PromptInputV2Attachment,
@@ -195,8 +196,9 @@ export function PromptInputV2(props: PromptInputV2Props) {
           </Show>
         </div>
 
-        <div class="flex h-11 items-center px-2">
+        <div data-slot="prompt-footer" class="flex h-11 items-center px-2">
           <div
+            data-slot="prompt-controls"
             class="flex min-w-0 flex-1 items-center gap-1"
             aria-hidden={state.mode === "shell"}
             inert={state.mode === "shell" ? true : undefined}
@@ -218,13 +220,16 @@ export function PromptInputV2(props: PromptInputV2Props) {
             />
             <Show when={view.agent} keyed>
               {(control) => (
-                <PromptInputV2ConfiguredSelect
-                  title={i18n.t("ui.promptInput.chooseAgent")}
-                  keybind={["Mod", "."]}
-                  control={control}
-                />
+                <div data-slot="prompt-agent-control" class="contents">
+                  <PromptInputV2ConfiguredSelect
+                    title={i18n.t("ui.promptInput.chooseAgent")}
+                    keybind={["Mod", "."]}
+                    control={control}
+                  />
+                </div>
               )}
             </Show>
+            <div data-slot="prompt-model-control" class="contents">
             <Show
               when={props.modelControl}
               fallback={
@@ -242,18 +247,22 @@ export function PromptInputV2(props: PromptInputV2Props) {
             >
               {props.modelControl}
             </Show>
+            </div>
             <Show when={(props.variantControlVisible ?? true) && view.variant} keyed>
               {(control) => (
                 <Show when={control.options().length > 1}>
-                  <PromptInputV2ConfiguredSelect
-                    title={i18n.t("ui.promptInput.chooseVariant")}
-                    keybind={["Shift", "Mod", "D"]}
-                    control={control}
-                  />
+                  <div data-slot="prompt-variant-control" class="contents">
+                    <PromptInputV2ConfiguredSelect
+                      title={i18n.t("ui.promptInput.chooseVariant")}
+                      keybind={["Shift", "Mod", "D"]}
+                      control={control}
+                    />
+                  </div>
                 </Show>
               )}
             </Show>
           </div>
+          <div data-slot="prompt-submit-slot" class="contents">
           <PromptInputV2SubmitButton
             mode={state.mode}
             stopping={view.submit.stopping()}
@@ -263,6 +272,7 @@ export function PromptInputV2(props: PromptInputV2Props) {
             onSubmit={props.controller.submit}
             onStop={props.controller.stop}
           />
+          </div>
         </div>
       </form>
     </div>

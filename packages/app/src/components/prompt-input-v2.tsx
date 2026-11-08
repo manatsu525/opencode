@@ -491,7 +491,7 @@ function PromptInputV2ModelControl(props: {
           />
         )}
       </Show>
-      <span class="truncate leading-4">{props.modelName}</span>
+      <span data-slot="prompt-model-name" class="min-w-0 flex-1 truncate leading-4">{props.modelName}</span>
       <span class="-ml-0.5 -mr-1 flex shrink-0">
         <Icon name="chevron-down" />
       </span>
