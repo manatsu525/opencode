@@ -1,6 +1,6 @@
 /// <reference lib="webworker" />
 
-import { closedMermaidFence, mermaidCode } from "./mermaid-source"
+import { markMermaidToken } from "./mermaid-source"
 
 import { ShikiStreamTokenizer } from "@shikijs/stream"
 import { createMarkdownParser } from "@opencode-ai/ui/context/marked-parser"
@@ -45,14 +45,7 @@ const parser = createMarkdownParser(async (code, language) => {
 })
 
 // Mark only genuinely closed fences; Mermaid itself stays out of this worker.
-parser.use({
-  renderer: {
-    code(token) {
-      if (!closedMermaidFence(token.raw)) return false
-      return mermaidCode(token.text)
-    },
-  },
-})
+parser.use({ walkTokens: markMermaidToken })
 
 self.onmessage = (event: MessageEvent<MarkdownWorkerRequest>) => {
   if (event.data.type === "dispose") {
