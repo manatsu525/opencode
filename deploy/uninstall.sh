@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+# Remove only this deployment; never remove octo, external workspaces or old demo backups.
+set -euo pipefail
+# shellcheck source=common.sh
+source "$(dirname -- "${BASH_SOURCE[0]}")/common.sh"
+yes=0 purge=0 restore_demo=0
+while (($#)); do
+  case "$1" in --yes) yes=1 ;; --purge) purge=1 ;; --restore-demo) restore_demo=1 ;; *) fail "Unknown option: $1" ;; esac
+  shift
+done
+((yes)) || fail 'Explicit --yes required; --purge permanently deletes OpenCode data/workspace and credentials'
+if [[ -z "$ROOT" ]]; then
+  (( EUID == 0 )) || fail 'Run with sudo/root'
+  systemctl disable --now opencode-web.service opencode.service 2>/dev/null || true
+  if [[ -f /etc/opencode/firewall-owned-port ]]; then
+    read -r port </etc/opencode/firewall-owned-port
+    validate_port "$port" || fail 'Invalid owned firewall record'
+    iptables -D INPUT -p tcp --dport "$port" -m comment --comment opencode-web -j ACCEPT
+    if systemctl is-active --quiet netfilter-persistent.service; then netfilter-persistent save; fi
+  fi
+fi
+rm -f -- "$(path /etc/systemd/system/opencode.service)" "$(path /etc/systemd/system/opencode-web.service)"
+rm -rf -- "$(path /opt/opencode)" "$(path /var/lib/opencode-web)"
+if ((purge)); then
+  rm -rf -- "$(path /var/lib/opencode)" "$(path /var/cache/opencode)" "$(path /etc/opencode)"
+fi
+if [[ -z "$ROOT" ]]; then
+  systemctl daemon-reload
+  systemctl reset-failed opencode.service opencode-web.service 2>/dev/null || true
+  if ((purge)); then
+    for user in opencode opencode-web; do if id "$user" >/dev/null 2>&1; then userdel "$user"; fi; done
+  fi
+  if ((restore_demo)); then systemctl start opencode-ui-demo.service; fi
+fi
+printf 'Removed isolated deployment. %s Octo, main nginx, reused firewall rules and external workspaces untouched.\n' "$([[ "$purge" == 1 ]] && printf 'OpenCode data/credentials purged.' || printf 'OpenCode data/credentials retained for reinstall.')"
