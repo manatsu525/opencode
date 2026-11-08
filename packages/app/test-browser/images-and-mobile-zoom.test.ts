@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, mock, test } from "bun:test"
 import { readFileSync } from "node:fs"
 import { setupInlineImages } from "../../session-ui/src/components/inline-images"
-import { safeImageUrl, toolImages, toolPageLinks } from "../../session-ui/src/components/image-source"
+import { safeImageUrl, toolImages } from "../../session-ui/src/components/image-source"
 
 import { openMediaViewer } from "../../session-ui/src/components/mermaid-viewer"
 import { setupPageZoomGuard } from "../src/utils/page-zoom"
@@ -57,13 +57,9 @@ describe("safe inline images", () => {
   })
 })
 
-test("article-only websearch results resolve source previews; incomplete/non-web tools do not", () => {
-  const part = { tool: "websearch", state: { status: "completed", input: {}, output: "Title: Photo article\nURL: https://example.com/article/123\nURL: https://example.com/article/123\nURL: javascript:bad" } } as ToolPart
-  expect(toolImages(part)).toEqual([])
-  expect(toolPageLinks(part)).toEqual(["https://example.com/article/123"])
-  expect(toolPageLinks({ ...part, tool: "bash" })).toEqual([])
-  expect(toolPageLinks({ ...part, state: { status: "running" } } as ToolPart)).toEqual([])
-  expect(toolPageLinks({ ...part, tool: "webfetch", state: { ...part.state, input: { url: "https://example.com/page" } } } as ToolPart)[0]).toBe("https://example.com/page")
+test("image-search MCP attachments take precedence over duplicate output URLs", () => {
+ const part = { tool: "image_search_search_images", state: { status: "completed", output: "![dog](https://example.com/a.jpg)", attachments: [{ mime: "image/jpeg", url: "data:image/jpeg;base64,AAAA" }] } } as ToolPart
+ expect(toolImages(part).map((image) => image.url)).toEqual(["data:image/jpeg;base64,AAAA"])
 })
 
 describe("mobile page zoom", () => {

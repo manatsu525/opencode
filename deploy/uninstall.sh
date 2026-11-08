@@ -22,7 +22,7 @@ fi
 rm -f -- "$(path /etc/systemd/system/opencode.service)" "$(path /etc/systemd/system/opencode-web.service)" "$(path /etc/systemd/system/opencode-auth.service)"
 rm -rf -- "$(path /opt/opencode)" "$(path /var/lib/opencode-web)"
 if ((purge)); then
-  rm -rf -- "$(path /var/lib/opencode)" "$(path /var/cache/opencode)" "$(path /var/lib/opencode-auth)" "$(path /etc/opencode)"
+  rm -rf -- "$(path /var/lib/opencode)" "$(path /var/cache/opencode)" "$(path /var/lib/opencode-auth)" "$(path /var/lib/opencode-images)" "$(path /etc/opencode)"
 fi
 if [[ -z "$ROOT" ]]; then
   systemctl daemon-reload

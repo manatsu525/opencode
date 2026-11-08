@@ -23,6 +23,7 @@ export function toolImages(part: ToolPart): ReplyImage[] {
   for (const file of part.state.attachments ?? []) {
     if (file.mime.startsWith("image/")) add(file.url, file.filename || "Tool image")
   }
+  if (result.length && /image_search/.test(part.tool ?? "")) return result
   // Structured FilePart attachments are authoritative. Also accept explicit Markdown
   // images and plain image-file URLs from text-only search/plugin results.
   const output = part.state.output.slice(0, 100000)
@@ -31,13 +32,4 @@ export function toolImages(part: ToolPart): ReplyImage[] {
   })
   for (const match of output.matchAll(/https?:\/\/[^\s<>"'`]+\.(?:png|jpe?g|gif|webp|avif|bmp|svg)(?:[?#][^\s<>"'`]*)?/gi)) add(match[0].replace(/[),.;]+$/, ""))
   return result
-}
-
-/** Search returns article URLs rather than image bytes. Resolve only explicit result links. */
-export function toolPageLinks(part: ToolPart): string[] {
-  if (part.state.status !== "completed" || !/web(search|fetch)/i.test(part.tool)) return []
-  const output = part.state.output.slice(0, 100000)
-  const urls = [...output.matchAll(/^URL:\s*(https?:\/\/\S+)/gm)].map((match) => match[1])
-  if (part.tool === "webfetch" && typeof part.state.input.url === "string") urls.unshift(part.state.input.url)
-  return [...new Set(urls.map((url) => safeImageUrl(url)).filter((url): url is string => !!url && /^https?:/.test(url)))].slice(0, 4)
 }

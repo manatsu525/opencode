@@ -172,6 +172,8 @@ python3 deploy/test_deploy.py --frontend /path/to/frontend.tar.gz   --backend /p
 - 上下文圆环在窄屏可点击，弹出 token、上下文占比和费用，支持关闭；桌面保留官方行为。
 - 两代设置窗口在 768px 以下使用全屏、顶部横向滚动标签、堆叠的标签/控件以及明确关闭按钮。
 - 工具附件 FilePart、Markdown 图片、工具输出中的原图 URL 均复用安全的行内图片和缩放查看器。
-- **websearch 可能只返回文章网址，不含图片。** 对明确的 `URL:` 搜索结果和 webfetch 输入网址，本部署额外读取公开网页 OpenGraph/Twitter 图片元数据，并明确标记“来源网页图片预览”；不是模型生成或模型实际返回的附件。无元数据/站点拒绝时不虚构图片，原来源链接仍可打开。前端独立接入其他未安装本 gate 的后端时不具备这一额外预览接口。
-- `/image-preview` 只供已登录用户；仅标准 HTTP(S) 端口，拒绝凭据、私网/回环/链路本地/本机地址，DNS 解析后固定实际连接 IP，每次重定向重新校验，不转发 Cookie/Authorization；最多 512KiB HTML、4 个并发、128 条缓存。不改官方后端，不调用模型，不消耗模型生成配额。图片由浏览器直连公开原站，lazy/no-referrer，站点仍可能防盗链或失效。
+- 搜图按 octo 的实际方式实现：预装免 Key 的 **Bing Images MCP** + 全局“必须遵守”规则。自然图片请求由模型调用 `image_search_search_images`，不要求用户写特殊问法。不改官方后端二进制。
+- MCP 下载真实搜索结果原图，Pillow 校验并压缩为最长边 1280px、JPEG 质量 82，剥离原始元数据，返回 MCP image content（官方自动保存成 FilePart）及同源 Markdown URL；前端直接显示附件并可点开缩放。不会用文章 og:image 代替搜图。
+- `/chat-images/<sha256>.jpg` 使用原有 Cookie 登录保护；无 Key、无任意 URL 图片代理。网络仅标准 HTTP(S)，拒绝私网/本机/回环、DNS 固定 IP 并优先 IPv4、每跳重新校验，限制下载 12MiB、像素 2500万、缓存 1GiB。缓存满时不删除历史图片；失败如实返回，Bing 页面格式/站点可用性可能变化。
+- 全局规则 `/etc/opencode/IMAGE_SEARCH.md` 由 config.instructions 加载，MCP 定义合并进 `/etc/opencode/opencode.json`；不覆盖其他 MCP/规则或 provider.env。安装器额外安装 python3-pil；卸载默认保留图片缓存，仅 --purge 删除 `/var/lib/opencode-images`。旧 `/image-preview` 返回 410，不再解析 OG。
 - DOM 回归命令：`cd packages/app && bun test --conditions=browser --preload ./happydom.ts --preload ./test-browser/solid-dom-preload.ts ./test-browser/mobile-settings-context.test.ts ./test-browser/images-and-mobile-zoom.test.ts`。DOM 夹具不等同真实手机几何截图，仍需真实浏览器验证每个标签、圆环和图片。

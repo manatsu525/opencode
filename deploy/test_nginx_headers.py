@@ -34,9 +34,10 @@ class HeaderTests(unittest.TestCase):
         for name,body in self.locations:
             headers=self.headers(body)
             if headers:self.assertEqual(set(headers),set(self.headers(self.server)),name)
-    def test_image_preview_inherits_auth_and_complete_headers(self):
-        body=next(body for name,body in self.locations if '/image-preview' in name)
-        self.assertIn('proxy_pass http://127.0.0.1:4097/image-preview',body);self.assertNotIn('auth_request off',body);self.assertEqual(self.headers(body),{})
+    def test_image_cache_inherits_cookie_auth_and_old_previews_disabled(self):
+        body=next(body for name,body in self.locations if '/chat-images/' in name and 'alias' in body)
+        self.assertNotIn('auth_request off',body);self.assertIn('alias /var/lib/opencode-images/',body)
+        self.assertIn('location = /image-preview { return 410; }',self.text)
     def test_cookie_upgrade_header_and_upstream_cookie_passthrough(self):
         self.assertEqual(self.headers(self.login)['Set-Cookie'],'$opencode_session_cookie');self.assertNotIn('proxy_hide_header Set-Cookie',self.text)
 

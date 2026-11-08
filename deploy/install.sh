@@ -105,8 +105,13 @@ if [[ -z "$ROOT" ]]; then
   done
   if ((missing)); then
     apt-get update -qq
-    DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-upgrade --no-install-recommends ca-certificates curl python3 openssl nginx tar iproute2
+    DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-upgrade --no-install-recommends ca-certificates curl python3 python3-pil openssl nginx tar iproute2
   fi
+fi
+# Image search downloads verified raster files; Pillow resizes and strips metadata.
+if [[ -z "$ROOT" ]] && ! python3 -c 'import PIL' >/dev/null 2>&1; then
+  apt-get update -qq
+  DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-upgrade --no-install-recommends python3-pil
 fi
 tmp=$(mktemp -d)
 demo_stopped=0

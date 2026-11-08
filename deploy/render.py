@@ -3,6 +3,7 @@
 import json, pathlib, subprocess, sys
 from credentials import atomic_write, read_env, validate, write_env
 from tls import ensure_certificate
+from image_config import install as install_image_search
 VERSION = "1.19.5"
 root, host, port, backend_port, workspace, login_file, cert_days, auth_port = sys.argv[1:]
 def p(name): return pathlib.Path(root + name)
@@ -29,6 +30,7 @@ config_mode = config_file.stat().st_mode & 0o777 if config_file.exists() else 0o
 config = json.loads(config_file.read_text()) if config_file.exists() else {"$schema":"https://opencode.ai/config.json", "autoupdate":False, "enabled_providers":["opencode-go"]}
 config["permission"] = {key: "allow" for key in ("*", "read", "edit", "glob", "grep", "list", "bash", "task", "external_directory", "todowrite", "question", "webfetch", "websearch", "lsp", "doom_loop", "skill")}
 write("/etc/opencode/opencode.json", json.dumps(config, indent=2)+"\n", config_mode)
+install_image_search(root,host,port)
 ensure_certificate(p("/etc/opencode/tls"), p("/opt/opencode/backups"), host, int(cert_days))
 backend = f"""[Unit]
 Description=Official OpenCode {VERSION} backend
@@ -170,10 +172,11 @@ LOGIN_HEADERS
    proxy_set_header X-Original-URI $request_uri;
    proxy_set_header X-Original-Origin $http_origin;
   }
-  location = /image-preview {
-   proxy_pass http://127.0.0.1:AUTH/image-preview;
-   proxy_set_header X-Original-Origin $http_origin;
+  location = /image-preview { return 410; }
+  location ~ ^/chat-images/([a-f0-9]+[.]jpg)$ {
+   alias /var/lib/opencode-images/$1;
   }
+  location /chat-images/ { return 404; }
   location = /site.webmanifest { auth_request off; default_type application/manifest+json; try_files $uri =404; }
   location ~ ^/(favicon[^/]*|apple-touch-icon[^/]*|android-chrome[^/]*|web-app-manifest[^/]*)$ {
    auth_request off;

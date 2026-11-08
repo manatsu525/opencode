@@ -13,5 +13,3 @@
 [data-component="chat-image"] { min-width: 0; max-width: 100%; }
 img[data-chat-image]:focus-visible { outline: 2px solid var(--icon-brand-base, #3b82f6); outline-offset: 3px; }
 [data-image-fallback] { overflow-wrap: anywhere; font-size: 13px; }
-[data-component="tool-page-image-preview"] { margin: 12px 0; min-width: 0; max-width: 100%; }
-[data-component="tool-page-image-preview"] figcaption { font-size: 12px; overflow-wrap: anywhere; color: var(--text-weak); }
