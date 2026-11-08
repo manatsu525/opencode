@@ -11,7 +11,7 @@ done
 ((yes)) || fail 'Explicit --yes required; --purge permanently deletes OpenCode data/workspace and credentials'
 if [[ -z "$ROOT" ]]; then
   (( EUID == 0 )) || fail 'Run with sudo/root'
-  systemctl disable --now opencode-web.service opencode.service 2>/dev/null || true
+  systemctl disable --now opencode-web.service opencode-auth.service opencode.service 2>/dev/null || true
   if [[ -f /etc/opencode/firewall-owned-port ]]; then
     read -r port </etc/opencode/firewall-owned-port
     validate_port "$port" || fail 'Invalid owned firewall record'
@@ -19,16 +19,16 @@ if [[ -z "$ROOT" ]]; then
     if systemctl is-active --quiet netfilter-persistent.service; then netfilter-persistent save; fi
   fi
 fi
-rm -f -- "$(path /etc/systemd/system/opencode.service)" "$(path /etc/systemd/system/opencode-web.service)"
+rm -f -- "$(path /etc/systemd/system/opencode.service)" "$(path /etc/systemd/system/opencode-web.service)" "$(path /etc/systemd/system/opencode-auth.service)"
 rm -rf -- "$(path /opt/opencode)" "$(path /var/lib/opencode-web)"
 if ((purge)); then
-  rm -rf -- "$(path /var/lib/opencode)" "$(path /var/cache/opencode)" "$(path /etc/opencode)"
+  rm -rf -- "$(path /var/lib/opencode)" "$(path /var/cache/opencode)" "$(path /var/lib/opencode-auth)" "$(path /etc/opencode)"
 fi
 if [[ -z "$ROOT" ]]; then
   systemctl daemon-reload
-  systemctl reset-failed opencode.service opencode-web.service 2>/dev/null || true
+  systemctl reset-failed opencode.service opencode-web.service opencode-auth.service 2>/dev/null || true
   if ((purge)); then
-    for user in opencode opencode-web; do if id "$user" >/dev/null 2>&1; then userdel "$user"; fi; done
+    for user in opencode opencode-web opencode-auth; do if id "$user" >/dev/null 2>&1; then userdel "$user"; fi; done
   fi
   if ((restore_demo)); then systemctl start opencode-ui-demo.service; fi
 fi

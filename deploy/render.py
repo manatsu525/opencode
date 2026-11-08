@@ -4,7 +4,7 @@ import json, pathlib, subprocess, sys
 from credentials import atomic_write, read_env, validate, write_env
 from tls import ensure_certificate
 VERSION = "1.19.5"
-root, host, port, backend_port, workspace, login_file, cert_days = sys.argv[1:]
+root, host, port, backend_port, workspace, login_file, cert_days, auth_port = sys.argv[1:]
 def p(name): return pathlib.Path(root + name)
 def write(name, value, mode=0o644):
     file = p(name); file.parent.mkdir(parents=True, exist_ok=True)
@@ -24,8 +24,11 @@ hashed = subprocess.check_output(["openssl", "passwd", "-6", "-stdin"], input=pa
 atomic_write(p("/etc/opencode/htpasswd"), username + ":" + hashed + "\n", 0o640)
 if not p("/etc/opencode/provider.env").exists():
     write("/etc/opencode/provider.env", "# Add your real OpenCode Go key here, then restart opencode.\n# OPENCODE_API_KEY=\n", 0o600)
-if not p("/etc/opencode/opencode.json").exists():
-    write("/etc/opencode/opencode.json", json.dumps({"$schema":"https://opencode.ai/config.json", "autoupdate":False, "enabled_providers":["opencode-go"]}, indent=2)+"\n")
+config_file = p("/etc/opencode/opencode.json")
+config_mode = config_file.stat().st_mode & 0o777 if config_file.exists() else 0o644
+config = json.loads(config_file.read_text()) if config_file.exists() else {"$schema":"https://opencode.ai/config.json", "autoupdate":False, "enabled_providers":["opencode-go"]}
+config["permission"] = {key: "allow" for key in ("*", "read", "edit", "glob", "grep", "list", "bash", "task", "external_directory", "todowrite", "question", "webfetch", "websearch", "lsp", "doom_loop", "skill")}
+write("/etc/opencode/opencode.json", json.dumps(config, indent=2)+"\n", config_mode)
 ensure_certificate(p("/etc/opencode/tls"), p("/opt/opencode/backups"), host, int(cert_days))
 backend = f"""[Unit]
 Description=Official OpenCode {VERSION} backend
@@ -34,8 +37,8 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-User=opencode
-Group=opencode
+User=root
+Group=root
 WorkingDirectory={workspace}
 Environment=HOME=/var/lib/opencode XDG_DATA_HOME=/var/lib/opencode/data XDG_CONFIG_HOME=/var/lib/opencode/config XDG_CACHE_HOME=/var/cache/opencode XDG_STATE_HOME=/var/lib/opencode/state OPENCODE_CONFIG=/etc/opencode/opencode.json
 EnvironmentFile=/etc/opencode/server.env
@@ -44,11 +47,10 @@ ExecStart=/opt/opencode/bin/opencode serve --hostname 127.0.0.1 --port {backend_
 Restart=on-failure
 RestartSec=3
 UMask=0077
-NoNewPrivileges=true
-PrivateTmp=true
-ProtectSystem=strict
-ProtectHome=true
-ReadWritePaths=/var/lib/opencode /var/cache/opencode {workspace}
+NoNewPrivileges=false
+PrivateTmp=false
+ProtectSystem=false
+ProtectHome=false
 MemoryHigh=768M
 MemoryMax=1536M
 CPUQuota=150%
@@ -61,8 +63,8 @@ WantedBy=multi-user.target
 write("/etc/systemd/system/opencode.service", backend)
 write("/etc/systemd/system/opencode-web.service", """[Unit]
 Description=Custom OpenCode HTTPS frontend (isolated nginx)
-After=network-online.target opencode.service
-Wants=opencode.service
+After=network-online.target opencode.service opencode-auth.service
+Wants=opencode.service opencode-auth.service
 
 [Service]
 Type=simple
@@ -86,6 +88,33 @@ TasksMax=32
 [Install]
 WantedBy=multi-user.target
 """)
+write("/etc/systemd/system/opencode-auth.service", f"""[Unit]
+Description=OpenCode one-year cookie login gate
+After=network.target
+
+[Service]
+Type=simple
+User=opencode-auth
+Group=opencode-auth
+EnvironmentFile=/etc/opencode/server.env
+Environment=OPENCODE_PUBLIC_ORIGIN=https://{host}:{port} OPENCODE_AUTH_PORT={auth_port} OPENCODE_AUTH_STATE=/var/lib/opencode-auth
+ExecStart=/usr/bin/python3 /opt/opencode/deploy/auth.py
+Restart=on-failure
+RestartSec=2
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/opencode-auth
+MemoryMax=96M
+TasksMax=64
+
+[Install]
+WantedBy=multi-user.target
+""")
+p("/var/lib/opencode-auth").mkdir(parents=True, exist_ok=True)
+p("/var/lib/opencode-auth").chmod(0o700)
 api = "agent|api|auth|command|config|doc|event|experimental|file|find|formatter|global|instance|log|lsp|mcp|path|permission|project|provider|pty|question|session|skill|sync|tui|vcs"
 nginx = """worker_processes 1;
 pid /var/lib/opencode-web/nginx.pid;
@@ -106,8 +135,10 @@ http {
   ssl_certificate_key /etc/opencode/tls/key.pem;
   ssl_protocols TLSv1.2 TLSv1.3;
   ssl_session_cache shared:OpenCodeTLS:1m;
-  auth_basic "OpenCode";
-  auth_basic_user_file /etc/opencode/htpasswd;
+  auth_request /_opencode_auth;
+  auth_request_set $opencode_authorization $upstream_http_x_opencode_authorization;
+  auth_request_set $opencode_session_cookie $upstream_http_set_cookie;
+  add_header Set-Cookie $opencode_session_cookie always;
   error_page 497 =308 https://$host:$server_port$request_uri;
   client_max_body_size 50m;
   root /opt/opencode/frontend;
@@ -116,11 +147,34 @@ http {
   add_header X-Frame-Options DENY always;
   add_header Cache-Control no-store always;
   add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https: http:; font-src 'self' data:; worker-src 'self' blob:; child-src 'self' blob:; connect-src 'self' blob: WSORIGIN; frame-ancestors 'none'" always;
+  location = /_opencode_auth {
+   internal;
+   auth_request off;
+   proxy_pass http://127.0.0.1:AUTH/auth;
+   proxy_pass_request_body off;
+   proxy_set_header Content-Length "";
+   proxy_set_header Cookie $http_cookie;
+   proxy_set_header Authorization $http_authorization;
+   proxy_set_header X-Original-URI $request_uri;
+   proxy_set_header X-Original-Accept $http_accept;
+   proxy_set_header X-Original-Origin $http_origin;
+  }
+  location ~ ^/(login|logout)$ {
+   auth_request off;
+   proxy_pass http://127.0.0.1:AUTH;
+   proxy_set_header X-Original-URI $request_uri;
+   proxy_set_header X-Original-Origin $http_origin;
+  }
+  location = /site.webmanifest { auth_request off; default_type application/manifest+json; try_files $uri =404; }
+  location ~ ^/(favicon[^/]*|apple-touch-icon[^/]*|android-chrome[^/]*)$ {
+   auth_request off;
+   try_files $uri =404;
+  }
   location ~ ^/(API)(/|$) {
    proxy_pass http://127.0.0.1:BACKEND;
    proxy_http_version 1.1;
    proxy_set_header Host $http_host;
-   proxy_set_header Authorization $http_authorization;
+   proxy_set_header Authorization $opencode_authorization;
    proxy_set_header X-Forwarded-Proto $scheme;
    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
    proxy_set_header Upgrade $http_upgrade;
@@ -130,10 +184,10 @@ http {
    proxy_read_timeout 3600s;
    proxy_send_timeout 3600s;
   }
-  location /assets/ { try_files $uri =404; }
-  location / { try_files $uri /index.html; }
+  location /assets/ { auth_request off; try_files $uri =404; }
+  location / { error_page 401 = /login; try_files $uri /index.html; }
  }
 }
 """
-write("/etc/opencode/nginx.conf", nginx.replace("WSORIGIN", "wss://" + ("["+host+"]" if ":" in host else host) + ":" + port).replace("PORT",port).replace("HOST",host).replace("BACKEND",backend_port).replace("API",api))
-write("/etc/opencode/install.json", json.dumps({"version":VERSION,"host":host,"port":int(port),"backend_port":int(backend_port),"workspace":workspace},indent=2)+"\n")
+write("/etc/opencode/nginx.conf", nginx.replace("WSORIGIN", "wss://" + ("["+host+"]" if ":" in host else host) + ":" + port).replace("PORT",port).replace("HOST",host).replace("BACKEND",backend_port).replace("AUTH",auth_port).replace("API",api))
+write("/etc/opencode/install.json", json.dumps({"version":VERSION,"host":host,"port":int(port),"backend_port":int(backend_port),"auth_port":int(auth_port),"workspace":workspace},indent=2)+"\n")

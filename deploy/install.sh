@@ -52,13 +52,14 @@ BOOTSTRAP_PY
 fi
 # shellcheck source=common.sh
 source "$install_source/common.sh"
-host=${OPENCODE_WEB_HOST:-} port=8558 backend_port=4096 workspace=/var/lib/opencode/workspace
+host=${OPENCODE_WEB_HOST:-} port=8558 backend_port=4096 auth_port=4097 workspace=/var/lib/opencode/workspace
 frontend='' frontend_sha='' backend='' replace_demo=0 no_firewall=0 dry_run=0
 while (($#)); do
   case "$1" in
     --host) host=${2:?}; shift 2 ;;
     --port) port=${2:?}; shift 2 ;;
     --backend-port) backend_port=${2:?}; shift 2 ;;
+    --auth-port) auth_port=${2:?}; shift 2 ;;
     --workspace) workspace=${2:?}; shift 2 ;;
     --frontend-archive) frontend=${2:?}; shift 2 ;;
     --frontend-sha256) frontend_sha=${2:?}; shift 2 ;;
@@ -76,9 +77,9 @@ if [[ -z "$host" ]]; then
   fi
 fi
 [[ "$host" =~ ^[A-Za-z0-9.:_-]+$ ]] || fail 'A public IP or hostname is required (no scheme/path)'
-if ! validate_port "$port" || ! validate_port "$backend_port"; then fail 'Invalid nonprivileged port'; fi
-[[ "$port" != "$backend_port" ]] || fail 'Public and internal ports must differ'
-for candidate in "$port" "$backend_port"; do
+if ! validate_port "$port" || ! validate_port "$backend_port" || ! validate_port "$auth_port"; then fail 'Invalid nonprivileged port'; fi
+[[ "$port" != "$backend_port" && "$port" != "$auth_port" && "$backend_port" != "$auth_port" ]] || fail 'Public and internal ports must differ'
+for candidate in "$port" "$backend_port" "$auth_port"; do
   case "$candidate" in 8557|8088|8090) fail 'Refusing reserved octo ports' ;; esac
 done
 [[ "$workspace" =~ ^/[A-Za-z0-9_./-]+$ && "$workspace" != *..* ]] || fail 'Use a simple absolute workspace path without .. or spaces'
@@ -86,7 +87,6 @@ if [[ -n "$frontend" || -n "$frontend_sha" ]]; then
   [[ "$frontend_sha" =~ ^[a-fA-F0-9]{64}$ ]] || fail '--frontend-sha256 is required with a local archive'
   [[ -f "$frontend" ]] || fail '--frontend-archive must name a local verified release tarball'
 fi
-case "$workspace" in /home|/home/*|/root|/root/*) fail 'The service protects /home and /root; use an isolated /var/lib/opencode or /srv workspace' ;; esac
 asset=$(asset_name "${OPENCODE_ARCH:-$(uname -m)}" "${OPENCODE_LIBC:-auto}")
 expected=$(awk -v name="$asset" '$2 == name {print $1}' "$HERE/official-v1.19.5.sha256")
 [[ -n "$expected" ]] || fail 'No pinned checksum for selected backend'
@@ -149,13 +149,13 @@ if [[ -d "$(path /opt/opencode/frontend)" ]]; then
   mv "$(path /opt/opencode/frontend)" "$(path /opt/opencode/backups)/frontend-$(date +%Y%m%d-%H%M%S)-$$"
 fi
 mv "$tmp/frontend" "$(path /opt/opencode/frontend)"
-python3 "$HERE/render.py" "$ROOT" "$host" "$port" "$backend_port" "$workspace" "$tmp/login.json" "$CERT_DAYS"
+python3 "$HERE/render.py" "$ROOT" "$host" "$port" "$backend_port" "$workspace" "$tmp/login.json" "$CERT_DAYS" "$auth_port"
 if [[ -n "$ROOT" ]]; then
   mkdir -p "$(path /var/lib/opencode/workspace)"
   printf 'Staged files only under %s; no users, services or firewall modified.\n' "$ROOT"
   exit 0
 fi
-for user in opencode opencode-web; do
+for user in opencode-web opencode-auth; do
   if id "$user" >/dev/null 2>&1; then
     existing_home=$(getent passwd "$user" | cut -d: -f6)
     [[ "$existing_home" == "/var/lib/$user" ]] || fail "Refusing to reuse unrelated account: $user"
@@ -168,20 +168,22 @@ chown root:opencode-web /etc/opencode/tls /etc/opencode/tls/key.pem /etc/opencod
 chmod 755 /etc/opencode
 chmod 750 /etc/opencode/tls
 chmod 640 /etc/opencode/tls/key.pem /etc/opencode/htpasswd
-chown -R opencode:opencode /var/lib/opencode /var/cache/opencode
+chown -R root:root /var/lib/opencode /var/cache/opencode
+chown -R opencode-auth:opencode-auth /var/lib/opencode-auth
+chmod 700 /var/lib/opencode-auth
 chown -R opencode-web:opencode-web /var/lib/opencode-web
 chmod 750 /var/lib/opencode /var/cache/opencode /var/lib/opencode-web
 if [[ ! -d "$workspace" ]]; then
   [[ "$workspace" == /var/lib/opencode/* ]] || fail 'External workspace must already exist; installer never chowns another app workspace'
-  install -d -o opencode -g opencode -m 750 "$workspace"
+  install -d -o root -g root -m 750 "$workspace"
 fi
-runuser -u opencode -- test -w "$workspace" || fail 'Workspace is not writable by opencode; no external ownership was changed'
-installed_version=$(runuser -u opencode -- /opt/opencode/bin/opencode --version)
+test -w "$workspace" || fail 'Workspace is not writable by backend root; no external ownership was changed'
+installed_version=$(/opt/opencode/bin/opencode --version)
 [[ "$installed_version" == "$VERSION" ]] || fail "Unexpected backend version"
 runuser -u opencode-web -- nginx -t -p /var/lib/opencode-web/ -c /etc/opencode/nginx.conf
 systemctl daemon-reload
-systemctl enable opencode.service opencode-web.service
-systemctl restart opencode.service
+systemctl enable opencode.service opencode-web.service opencode-auth.service
+systemctl restart opencode-auth.service opencode.service
 python3 "$HERE/verify.py" --internal --port "$backend_port"
 if systemctl is-active --quiet opencode-ui-demo.service; then
   ((replace_demo)) || fail 'Demo is active; pass --replace-demo to replace only its listener'

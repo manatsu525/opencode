@@ -7,7 +7,7 @@ here = pathlib.Path(__file__).resolve().parent
 parser = argparse.ArgumentParser()
 parser.add_argument("--frontend", required=True); parser.add_argument("--backend", required=True)
 parser.add_argument("--arch", default=os.uname().machine)
-parser.add_argument("--systemd", action="store_true", help="Also check actual systemd EnvironmentFile serialization (sudo, installed opencode user)")
+parser.add_argument("--systemd", action="store_true", help="Also check actual systemd EnvironmentFile serialization (sudo, installed opencode-auth user)")
 args = parser.parse_args()
 env = {key: value for key, value in os.environ.items() if key not in ("OPENCODE_WEB_USER", "OPENCODE_WEB_PASSWORD")}
 checks = []
@@ -74,7 +74,7 @@ with tempfile.TemporaryDirectory(prefix="opencode-login-test-") as temp:
         write_env(environment_file, fixtures)
         hashes = {key: hashlib.sha256(value.encode()).hexdigest() for key, value in fixtures.items()}
         code = "import os,hashlib; expected=" + repr(hashes) + "; assert all(hashlib.sha256(os.environ[k].encode()).hexdigest()==v for k,v in expected.items())"
-        result = subprocess.run(["systemd-run","--quiet","--wait","--collect","--pipe","--unit=opencode-credential-test-"+str(os.getpid()),"--uid=opencode","--property=EnvironmentFile="+str(environment_file),sys.executable,"-c",code],capture_output=True)
+        result = subprocess.run(["systemd-run","--quiet","--wait","--collect","--pipe","--unit=opencode-credential-test-"+str(os.getpid()),"--uid=opencode-auth","--property=EnvironmentFile="+str(environment_file),sys.executable,"-c",code],capture_output=True)
         check("real systemd special-character/Unicode/trailing-backslash serialization", result.returncode == 0)
     first, wrong, second = b"TTY-test-secret-one", b"TTY-wrong-secret", b"TTY-test-secret-two"
     steps = [(b"Login username [admin]: ", b""), (b"Login password (required): ", b""), (b"Login password (required): ", first), (b"Confirm password: ", wrong), (b"Login password (required): ", second), (b"Confirm password: ", second)]
