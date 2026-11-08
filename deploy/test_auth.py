@@ -34,6 +34,12 @@ class AuthTests(unittest.TestCase):
         for item in (COOKIE+'=', 'Path=/', 'Max-Age='+str(MAX_AGE),'Secure','HttpOnly','SameSite=Lax'):self.assertIn(item,headers['Set-Cookie'])
         self.assertNotIn('Domain=',headers['Set-Cookie']);self.assertEqual(headers['Location'],'/')
     def test_cookie_auth(self):self.assertEqual(self.request(headers={'Cookie':self.token()})[0],200)
+    def test_same_origin_form_post_allowed(self):
+        body=urllib.parse.urlencode({"username":self.username,"password":self.password})
+        status,headers,_=self.request('/login','POST',body,{'Origin':'https://test.example:8558','X-Original-Origin':'https://test.example:8558','Content-Type':'application/x-www-form-urlencoded'})
+        self.assertEqual(status,303);self.assertIn(COOKIE+'=',headers['Set-Cookie'])
+    def test_null_origin_post_still_denied(self):
+        self.assertEqual(self.request('/login','POST','',{'Origin':'null','X-Original-Origin':'null'})[0],403)
     def test_wrong_password(self):self.assertEqual(self.login(password='incorrect')[0],401)
     def test_wrong_username(self):self.assertEqual(self.login(username='opencode')[0],401)
     def test_cookie_survives_restart(self):

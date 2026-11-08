@@ -116,6 +116,15 @@ WantedBy=multi-user.target
 p("/var/lib/opencode-auth").mkdir(parents=True, exist_ok=True)
 p("/var/lib/opencode-auth").chmod(0o700)
 api = "agent|api|auth|command|config|doc|event|experimental|file|find|formatter|global|instance|log|lsp|mcp|path|permission|project|provider|pty|question|session|skill|sync|tui|vcs"
+# nginx inherits add_header only when a location defines none of its own.
+# Reuse the complete set, including CSP and Basic-to-cookie upgrade, at both scopes.
+def response_headers(referrer):
+    return f"""  add_header Set-Cookie $opencode_session_cookie always;
+  add_header X-Content-Type-Options nosniff always;
+  add_header Referrer-Policy {referrer} always;
+  add_header X-Frame-Options DENY always;
+  add_header Cache-Control no-store always;
+  add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https: http:; font-src 'self' data:; worker-src 'self' blob:; child-src 'self' blob:; connect-src 'self' blob: WSORIGIN; frame-ancestors 'none'" always;"""
 nginx = """worker_processes 1;
 pid /var/lib/opencode-web/nginx.pid;
 error_log stderr warn;
@@ -138,15 +147,10 @@ http {
   auth_request /_opencode_auth;
   auth_request_set $opencode_authorization $upstream_http_x_opencode_authorization;
   auth_request_set $opencode_session_cookie $upstream_http_set_cookie;
-  add_header Set-Cookie $opencode_session_cookie always;
   error_page 497 =308 https://$host:$server_port$request_uri;
   client_max_body_size 50m;
   root /opt/opencode/frontend;
-  add_header X-Content-Type-Options nosniff always;
-  add_header Referrer-Policy no-referrer always;
-  add_header X-Frame-Options DENY always;
-  add_header Cache-Control no-store always;
-  add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https: http:; font-src 'self' data:; worker-src 'self' blob:; child-src 'self' blob:; connect-src 'self' blob: WSORIGIN; frame-ancestors 'none'" always;
+SERVER_HEADERS
   location = /_opencode_auth {
    internal;
    auth_request off;
@@ -160,6 +164,7 @@ http {
    proxy_set_header X-Original-Origin $http_origin;
   }
   location ~ ^/(login|logout)$ {
+LOGIN_HEADERS
    auth_request off;
    proxy_pass http://127.0.0.1:AUTH;
    proxy_set_header X-Original-URI $request_uri;
@@ -189,5 +194,5 @@ http {
  }
 }
 """
-write("/etc/opencode/nginx.conf", nginx.replace("WSORIGIN", "wss://" + ("["+host+"]" if ":" in host else host) + ":" + port).replace("PORT",port).replace("HOST",host).replace("BACKEND",backend_port).replace("AUTH",auth_port).replace("API",api))
+write("/etc/opencode/nginx.conf", nginx.replace("SERVER_HEADERS", response_headers("no-referrer")).replace("LOGIN_HEADERS", response_headers("same-origin")).replace("WSORIGIN", "wss://" + ("["+host+"]" if ":" in host else host) + ":" + port).replace("PORT",port).replace("HOST",host).replace("BACKEND",backend_port).replace("AUTH",auth_port).replace("API",api))
 write("/etc/opencode/install.json", json.dumps({"version":VERSION,"host":host,"port":int(port),"backend_port":int(backend_port),"auth_port":int(auth_port),"workspace":workspace},indent=2)+"\n")

@@ -79,6 +79,12 @@ sudo openssl x509 -in /etc/opencode/tls/cert.pem -noout -fingerprint -sha256
 
 正式域名可替换 `/etc/opencode/tls/cert.pem` 和 `key.pem` 为可信证书，再 reload `opencode-web`；注意之后重装也会按上述余期规则替换短期证书，使用外部证书管理时请自行备份并协调该行为。保留 root:opencode-web 所有权，私钥 0640、TLS 目录 0750。不要改变 octo 原证书的权限。
 
+## 登录响应头与跨域检查
+
+登录/退出 location 使用 `Referrer-Policy: same-origin`，避免浏览器表单 POST 在 no-referrer 下产生 `Origin: null` 导致 403；应用其他响应仍保持 no-referrer。登录 gate 不放宽 Origin 校验，null 和其他来源仍拒绝。
+
+nginx 的 location 一旦定义任何 add_header 就不再继承 server 的整组 add_header，因此模板复用完整响应头集合：登录页仍包含 CSP、nosniff、DENY、no-store 与认证升级 Set-Cookie。其他 location 没有局部 add_header，正常继承。上游登录 handler 返回的真正 Set-Cookie 仍正常透传。
+
 ## 密码与 OpenCode Go
 
 - 每次安装/重装都从 **`/dev/tty`** 询问用户名（回车默认 `admin`）、隐藏输入密码及再次确认。密码不能为空或全空白，确认不一致会重新询问；**不提供空密码沿用旧值**，避免误沿用旧登录。普通运行即使已安装也仍会询问。用户名限 1–64 位 ASCII 字母/数字或 `_ . @ -`，不能含 Basic auth 分隔符冒号；密码允许空格、引号、反斜杠、`$` 等可打印字符，但不能含换行/控制字符。env 文件采用兼容 Ubuntu 20.04 systemd 的字面转义，程序读取时会还原，勿把文件里的转义符误当成密码。
@@ -149,6 +155,7 @@ sudo bash deploy/uninstall.sh --yes --purge --restore-demo
 (cd deploy && shellcheck -x install.sh uninstall.sh common.sh)
 bash -n deploy/{common,install,uninstall}.sh
 python3 deploy/test_auth.py
+python3 deploy/test_nginx_headers.py
 python3 deploy/test_release.py --frontend /path/to/frontend.tar.gz --backend /path/to/opencode-linux-x64-baseline.tar.gz
 python3 deploy/test_credentials.py --frontend /path/to/frontend.tar.gz --backend /path/to/opencode-linux-x64-baseline.tar.gz
 # 已安装 ARM/systemd 主机可加 --systemd 检查真实 EnvironmentFile 特殊字符/Unicode/末尾反斜杠解析（sudo 运行，后端和 octo 不重启）
