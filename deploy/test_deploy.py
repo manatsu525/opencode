@@ -23,6 +23,7 @@ with tempfile.TemporaryDirectory(prefix="opencode-deploy-test-") as temp:
     check("backend explicitly runs as root with unchanged XDG state", "User=root" in backend_unit and "HOME=/var/lib/opencode" in backend_unit and "ProtectHome=false" in backend_unit)
     check("wildcard and specific default permissions all allow",set(json.loads((root/"etc/opencode/opencode.json").read_text())["permission"].values())=={"allow"})
     check("auth helper isolated and cookie-gated proxy generated", "User=opencode-auth" in (root/"etc/systemd/system/opencode-auth.service").read_text() and "auth_request /_opencode_auth" in (root/"etc/opencode/nginx.conf").read_text())
+    check("PWA manifest icons explicitly public", "web-app-manifest[^/]*" in (root/"etc/opencode/nginx.conf").read_text())
     install()
     check("idempotent server password",hashlib.sha256(credential.read_bytes()).hexdigest()==secret_hash)
     check("idempotent certificate",hashlib.sha256((root/"etc/opencode/tls/cert.pem").read_bytes()).hexdigest()==cert_hash)

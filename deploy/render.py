@@ -166,7 +166,7 @@ http {
    proxy_set_header X-Original-Origin $http_origin;
   }
   location = /site.webmanifest { auth_request off; default_type application/manifest+json; try_files $uri =404; }
-  location ~ ^/(favicon[^/]*|apple-touch-icon[^/]*|android-chrome[^/]*)$ {
+  location ~ ^/(favicon[^/]*|apple-touch-icon[^/]*|android-chrome[^/]*|web-app-manifest[^/]*)$ {
    auth_request off;
    try_files $uri =404;
   }
