@@ -1,3 +1,5 @@
+import { createMediaQuery } from "@solid-primitives/media"
+import "./settings-mobile.css"
 import { Component, createSignal, startTransition } from "solid-js"
 import { Dialog } from "@opencode-ai/ui/dialog"
 import { Tabs } from "@opencode-ai/ui/tabs"
@@ -12,6 +14,7 @@ import { SettingsModels } from "./settings-models"
 import { SettingsServers } from "./settings-servers"
 
 export const DialogSettings: Component<{ defaultValue?: string }> = (props) => {
+  const mobile = createMediaQuery("(max-width: 767px)")
   const language = useLanguage()
   const platform = usePlatform()
   const dialog = useDialog()
@@ -22,9 +25,10 @@ export const DialogSettings: Component<{ defaultValue?: string }> = (props) => {
   }
 
   return (
-    <Dialog size="x-large" transition>
+    <Dialog size="x-large" transition class="settings-mobile-dialog">
+      <div class="settings-mobile-header"><span>{language.t("command.settings.open")}</span><button type="button" onClick={() => dialog.close()} aria-label={language.t("common.close")}>×</button></div>
       <Tabs
-        orientation="vertical"
+        orientation={mobile() ? "horizontal" : "vertical"}
         variant="settings"
         value={tab()}
         onChange={(value) => void startTransition(() => setTab(value))}
@@ -67,7 +71,7 @@ export const DialogSettings: Component<{ defaultValue?: string }> = (props) => {
                 </div>
               </div>
             </div>
-            <div class="flex flex-col gap-1 pl-1 py-1 text-12-medium text-text-weak">
+            <div class="settings-mobile-nav-footer flex flex-col gap-1 pl-1 py-1 text-12-medium text-text-weak">
               <span>{language.t("app.name.desktop")}</span>
               <span class="text-11-regular">v{platform.version}</span>
             </div>

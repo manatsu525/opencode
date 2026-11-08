@@ -3,6 +3,7 @@ import { ProgressCircle } from "@opencode-ai/ui/progress-circle"
 import { ProgressCircleV2 } from "@opencode-ai/ui/v2/progress-circle-v2"
 import { Button } from "@opencode-ai/ui/button"
 import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
+import { MobileContextUsage } from "./session-context-usage-mobile"
 import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
 import { createMediaQuery } from "@solid-primitives/media"
 
@@ -125,8 +126,8 @@ export function SessionContextUsage(props: SessionContextUsageProps) {
     </div>
   )
 
-  const tooltipValue = () => (
-    <div class="flex w-[120px] flex-col gap-2">
+  const tooltipValue = (mobile = false) => (
+    <div class={mobile ? "flex w-full flex-col gap-3" : "flex w-[120px] flex-col gap-2"}>
       <ContextTooltipRow name={language.t("context.usage.cost")} value={cost()} />
       <ContextTooltipRow name={language.t("context.usage.usage")} value={`${context()?.usage ?? 0}%`} />
       <ContextTooltipRow
@@ -138,6 +139,7 @@ export function SessionContextUsage(props: SessionContextUsageProps) {
 
   return (
     <Show when={params.id}>
+      <Show when={!isDesktop()} fallback={
       <TooltipV2 value={tooltipValue()} placement={props.placement ?? "top"} shift={-8}>
         <Switch>
           <Match when={variant() === "indicator"}>{circle()}</Match>
@@ -164,6 +166,11 @@ export function SessionContextUsage(props: SessionContextUsageProps) {
           </Match>
         </Switch>
       </TooltipV2>
+      }>
+        <MobileContextUsage title={language.t("context.usage.view")} trigger={buttonAppearance() === "v2" ? circleV2() : circle()}>
+          {tooltipValue(true)}
+        </MobileContextUsage>
+      </Show>
     </Show>
   )
 }

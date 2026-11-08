@@ -23,7 +23,7 @@
 - `opencode-deploy-v1.19.5-manatsu.1.tar.gz.sha256`
 - 中文发布说明 `RELEASE_NOTES.zh-CN.md`
 
-默认安装器从 `https://github.com/manatsu525/opencode/releases/download/v1.19.5-manatsu.1/` 下载部署包、前端包和各自 SHA256，校验后执行/安装。这里只准备文件，不自动创建 release 或上传；**推送分支并上传上述四个包/校验文件之前，公开一键命令不能成功**。tar 根目录必须直接包含 `index.html`、`assets/`；`FRONTEND_BUILD.json` 记录前端源码 commit。每个新包的精确源码 SHA 以 `FRONTEND_BUILD.json` / `deploy/DEPLOY_BUILD.json` 为准。
+默认安装器从 `https://github.com/manatsu525/opencode/releases/download/v1.19.5-manatsu.1/` 下载部署包、前端包和各自 SHA256，校验后执行/安装。此 release 已发布；后续更新需重新构建并同时替换上述四个包/校验文件，避免旧脚本与新前端混用。tar 根目录必须直接包含 `index.html`、`assets/`；`FRONTEND_BUILD.json` 记录前端源码 commit。每个新包的精确源码 SHA 以 `FRONTEND_BUILD.json` / `deploy/DEPLOY_BUILD.json` 为准。
 
 自己构建时，在构建机（而不是生产 VM）使用仓库指定的 Bun 版本：
 
@@ -165,3 +165,13 @@ python3 deploy/test_deploy.py --frontend /path/to/frontend.tar.gz   --backend /p
 发布测试使用本机 HTTP fixture 镜像模拟尚未发布的 release，验证不带参数/无 helpers 的真实 `curl | bash` 默认下载链路、摘要损坏拒绝、临时文件清理，以及 3650 天证书/九年余期换证/私密备份。它不是公开 GitHub release 已上传的证明。
 
 其他测试包含 PTY 隐藏输入、默认用户名、空密码/确认错误、无 TTY 明确失败、显式环境变量与特殊字符、真正的 `curl | bash` 首装/重装提问。另在临时 DESTDIR 中验证安装、重装、显式同凭据幂等、凭据更换且 provider/证书不变、备份、卸载/清空、架构选择和路径穿越拦截；AMD64 还实际启动官方 serve 二进制，验证带认证 health 和未认证 401，不发生成请求。它不是“完整 x86 systemd 安装测试”；生产 ARM64 VM 上另做真实 systemd/HTTPS/SSE 验证。
+
+
+### 手机图片、上下文与设置
+
+- 上下文圆环在窄屏可点击，弹出 token、上下文占比和费用，支持关闭；桌面保留官方行为。
+- 两代设置窗口在 768px 以下使用全屏、顶部横向滚动标签、堆叠的标签/控件以及明确关闭按钮。
+- 工具附件 FilePart、Markdown 图片、工具输出中的原图 URL 均复用安全的行内图片和缩放查看器。
+- **websearch 可能只返回文章网址，不含图片。** 对明确的 `URL:` 搜索结果和 webfetch 输入网址，本部署额外读取公开网页 OpenGraph/Twitter 图片元数据，并明确标记“来源网页图片预览”；不是模型生成或模型实际返回的附件。无元数据/站点拒绝时不虚构图片，原来源链接仍可打开。前端独立接入其他未安装本 gate 的后端时不具备这一额外预览接口。
+- `/image-preview` 只供已登录用户；仅标准 HTTP(S) 端口，拒绝凭据、私网/回环/链路本地/本机地址，DNS 解析后固定实际连接 IP，每次重定向重新校验，不转发 Cookie/Authorization；最多 512KiB HTML、4 个并发、128 条缓存。不改官方后端，不调用模型，不消耗模型生成配额。图片由浏览器直连公开原站，lazy/no-referrer，站点仍可能防盗链或失效。
+- DOM 回归命令：`cd packages/app && bun test --conditions=browser --preload ./happydom.ts --preload ./test-browser/solid-dom-preload.ts ./test-browser/mobile-settings-context.test.ts ./test-browser/images-and-mobile-zoom.test.ts`。DOM 夹具不等同真实手机几何截图，仍需真实浏览器验证每个标签、圆环和图片。

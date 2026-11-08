@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, mock, test } from "bun:test"
 import { readFileSync } from "node:fs"
 import { setupInlineImages } from "../../session-ui/src/components/inline-images"
-import { safeImageUrl, toolImages } from "../../session-ui/src/components/image-source"
+import { safeImageUrl, toolImages, toolPageLinks } from "../../session-ui/src/components/image-source"
 
 import { openMediaViewer } from "../../session-ui/src/components/mermaid-viewer"
 import { setupPageZoomGuard } from "../src/utils/page-zoom"
@@ -55,6 +55,15 @@ describe("safe inline images", () => {
     expect(toolImages(part).map((x) => x.url)).toEqual(["data:image/png;base64,AAAA", "https://example.com/no-extension?id=1", "https://example.com/photo.jpg"])
     expect(toolImages({ ...part, state: { status: "running" } } as ToolPart)).toEqual([])
   })
+})
+
+test("article-only websearch results resolve source previews; incomplete/non-web tools do not", () => {
+  const part = { tool: "websearch", state: { status: "completed", input: {}, output: "Title: Photo article\nURL: https://example.com/article/123\nURL: https://example.com/article/123\nURL: javascript:bad" } } as ToolPart
+  expect(toolImages(part)).toEqual([])
+  expect(toolPageLinks(part)).toEqual(["https://example.com/article/123"])
+  expect(toolPageLinks({ ...part, tool: "bash" })).toEqual([])
+  expect(toolPageLinks({ ...part, state: { status: "running" } } as ToolPart)).toEqual([])
+  expect(toolPageLinks({ ...part, tool: "webfetch", state: { ...part.state, input: { url: "https://example.com/page" } } } as ToolPart)[0]).toBe("https://example.com/page")
 })
 
 describe("mobile page zoom", () => {

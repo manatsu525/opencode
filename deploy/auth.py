@@ -60,6 +60,13 @@ def make_server(address, username, password, origin, folder):
             return not supplied or hmac.compare_digest(supplied,origin)
         def do_GET(self):
             path=urllib.parse.urlsplit(self.path)
+            if path.path=='/image-preview':
+                if not self.same_origin():self.reply(403);return
+                if not (sessions.valid(self.token()) or hmac.compare_digest(self.headers.get('Authorization','').encode(),backend.encode())):self.reply(401);return
+                from image_preview import preview
+                url=urllib.parse.parse_qs(path.query).get('url',[''])[0]
+                images=preview(url,urllib.parse.urlsplit(origin).hostname)
+                self.reply(200,json.dumps({'images':images}).encode(),{'Content-Type':'application/json'});return
             if path.path=='/auth':
                 if not self.same_origin():self.reply(403);return
                 if sessions.valid(self.token()):self.reply(200,headers={'X-Opencode-Authorization':backend});return

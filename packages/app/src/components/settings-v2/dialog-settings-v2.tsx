@@ -1,3 +1,5 @@
+import { createMediaQuery } from "@solid-primitives/media"
+import "../settings-mobile.css"
 import { Component, createMemo, createSignal, startTransition } from "solid-js"
 import { Dialog } from "@opencode-ai/ui/v2/dialog-v2"
 import { TabsV2 } from "@opencode-ai/ui/v2/tabs-v2"
@@ -19,6 +21,7 @@ export const DialogSettings: Component<{
   sessionID?: string
   defaultValue?: string
 }> = (props) => {
+  const mobile = createMediaQuery("(max-width: 767px)")
   const language = useLanguage()
   const platform = usePlatform()
   const dialog = useDialog()
@@ -42,9 +45,10 @@ export const DialogSettings: Component<{
   }
 
   return (
-    <Dialog size="x-large" variant="settings" class="settings-v2-dialog">
+    <Dialog size="x-large" variant="settings" class="settings-v2-dialog settings-mobile-dialog">
+      <div class="settings-mobile-header"><span>{language.t("command.settings.open")}</span><button type="button" onClick={() => dialog.close()} aria-label={language.t("common.close")}>×</button></div>
       <TabsV2
-        orientation="vertical"
+        orientation={mobile() ? "horizontal" : "vertical"}
         variant="settings"
         value={tab()}
         onChange={(value) => void startTransition(() => setTab(value))}

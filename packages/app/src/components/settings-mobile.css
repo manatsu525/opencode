@@ -1,0 +1,90 @@
+/* Both settings generations use the entire phone, not a desktop sidebar squeezed into a modal. */
+.settings-mobile-header { display: none; }
+@media (max-width: 767px) {
+  .settings-mobile-header { display: flex; flex: 0 0 auto; justify-content: space-between; align-items: center; padding: max(6px, env(safe-area-inset-top)) 16px 6px; min-height: 44px; }
+  .settings-mobile-header button { min-width: 44px; min-height: 44px; font-size: 26px; cursor: pointer; }
+  .settings-mobile-dialog > [data-slot="dialog-body"] { display: flex; flex-direction: column; flex: 1; min-height: 0; height: 100%; overflow: hidden; }
+  :is([data-component="dialog"], [data-component="dialog-v2"]):has(.settings-mobile-dialog) {
+    align-items: stretch;
+    justify-content: stretch;
+  }
+  :is([data-component="dialog"], [data-component="dialog-v2"]):has(.settings-mobile-dialog) > [data-slot="dialog-container"] {
+    width: 100vw;
+    max-width: 100vw;
+    height: 100dvh;
+    max-height: 100dvh;
+    border-radius: 0;
+  }
+  :is([data-component="dialog"], [data-component="dialog-v2"]) .settings-mobile-dialog[data-slot="dialog-content"] {
+    width: 100%;
+    height: 100%;
+    max-height: 100%;
+    min-height: 0;
+    border-radius: 0;
+    overflow: hidden;
+  }
+  .settings-mobile-dialog :is([data-component="tabs"], [data-component="tabs-v2"]) {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    min-width: 0;
+    min-height: 0;
+    height: 100%;
+    flex: 1;
+  }
+  .settings-mobile-dialog :is([data-slot="tabs-list"], [data-slot="tabs-v2-list"]) {
+    display: flex;
+    flex-direction: row;
+    flex: 0 0 auto;
+    width: 100%;
+    min-width: 0;
+    max-width: 100vw;
+    height: auto;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding: max(8px, env(safe-area-inset-top)) 12px 8px;
+    border-inline-end: 0;
+    border-bottom: 1px solid var(--border-weak-base);
+    scrollbar-width: none;
+    touch-action: pan-x;
+  }
+  .settings-mobile-dialog :is([data-slot="tabs-list"], [data-slot="tabs-v2-list"]) div:not([data-slot*="trigger"]):not([data-component="icon"]) { display: contents; }
+  .settings-mobile-dialog :is([data-slot="tabs-section-title"], [data-slot="tabs-v2-section-title"], .settings-v2-nav-footer, .settings-mobile-nav-footer) { display: none !important; }
+  .settings-mobile-dialog :is([data-slot="tabs-trigger-wrapper"], [data-slot="tabs-v2-trigger-wrapper"]) {
+    flex: 0 0 auto;
+    width: auto;
+    min-width: max-content;
+    height: 44px;
+  }
+  .settings-mobile-dialog :is([data-slot="tabs-trigger"], [data-slot="tabs-v2-trigger"]) { min-height: 44px; padding: 8px 12px; white-space: nowrap; }
+  .settings-mobile-dialog :is([data-slot="tabs-content"], [data-slot="tabs-v2-content"]) {
+    width: 100%;
+    min-width: 0;
+    min-height: 0;
+    height: auto;
+    flex: 1 1 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  .settings-mobile-dialog .settings-v2-tab-header { padding: 20px 16px; }
+  .settings-mobile-dialog .settings-v2-tab-body { padding: 0 16px 24px; gap: 24px; }
+  .settings-mobile-dialog [data-component="settings-v2-list"] { padding-inline: 14px; }
+  .settings-mobile-dialog :is([data-component="settings-v2-row"], .settings-v2-provider-row, .settings-v2-shortcuts [data-component="settings-v2-list"] > div) {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
+  .settings-mobile-dialog :is([data-slot="settings-v2-row-copy"], [data-slot="settings-v2-row-control"]) {
+    flex: 0 0 auto;
+    width: 100%;
+    min-width: 0;
+    justify-content: flex-start;
+  }
+  .settings-mobile-dialog :is([data-slot="settings-v2-row-title"], [data-slot="settings-v2-row-description"]) { line-height: 1.5; overflow-wrap: anywhere; }
+  .settings-mobile-dialog :is(input, textarea, select, [contenteditable="true"]) { max-width: 100%; min-width: 0; font-size: 16px; }
+  .settings-mobile-dialog [data-slot="tabs-content"] > div { padding-inline: 16px; min-width: 0; }
+  .settings-mobile-dialog [data-slot="tabs-content"] .flex.items-center.justify-between { flex-direction: column; align-items: stretch; gap: 12px; }
+}
