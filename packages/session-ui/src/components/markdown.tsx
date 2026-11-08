@@ -32,6 +32,8 @@ import { markdownBlockKey, type MarkdownToken } from "./markdown-worker-protocol
 import { shouldResetCodeTokens, type RenderedCodeState } from "./markdown-code-state"
 import { getCachedMarkdown, sanitizeMarkdown, touchCachedMarkdown, type MarkdownCacheEntry } from "./markdown-cache"
 import { inlineCodeKind } from "./markdown-inline-code-kind"
+import { setupMermaid } from "./mermaid"
+import { closedMermaidFence } from "./mermaid-source"
 
 type RenderedBlock =
   | (MarkdownCacheEntry & { key: string; mode: Exclude<Block["mode"], "code"> })
@@ -490,6 +492,11 @@ export function Markdown(
     },
   )
 
+  createEffect(() => {
+    const container = root()
+    if (container && !isServer) onCleanup(setupMermaid(container))
+  })
+
   let copyCleanup: (() => void) | undefined
 
   createEffect(() => {
@@ -644,6 +651,7 @@ function updateCodeBlock(
   next.dataset.markdownKey = block.key
   next.dataset.markdownHash = block.hash
   next.dataset.markdownComplete = block.complete ? "true" : "false"
+  next.dataset.mermaidComplete = block.complete && closedMermaidFence(block.raw) ? "true" : "false"
   next.style.display = "contents"
 
   const code = existing?.querySelector("code")

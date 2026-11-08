@@ -1,5 +1,7 @@
 /// <reference lib="webworker" />
 
+import { closedMermaidFence, mermaidCode } from "./mermaid-source"
+
 import { ShikiStreamTokenizer } from "@shikijs/stream"
 import { createMarkdownParser } from "@opencode-ai/ui/context/marked-parser"
 import { OpenCodeTheme } from "@opencode-ai/ui/context/marked-theme"
@@ -40,6 +42,16 @@ const parser = createMarkdownParser(async (code, language) => {
   if (!instance.getLoadedLanguages().includes(name))
     await instance.loadLanguage(bundledLanguages[name as BundledLanguage])
   return instance.codeToHtml(code, { lang: name as BundledLanguage, theme: "OpenCode", tabindex: false })
+})
+
+// Mark only genuinely closed fences; Mermaid itself stays out of this worker.
+parser.use({
+  renderer: {
+    code(token) {
+      if (!closedMermaidFence(token.raw)) return false
+      return mermaidCode(token.text)
+    },
+  },
 })
 
 self.onmessage = (event: MessageEvent<MarkdownWorkerRequest>) => {
