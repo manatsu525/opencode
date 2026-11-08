@@ -8,7 +8,7 @@
 - `deploy/official-v1.19.5.sha256` 固定 GitHub 官方不可变发布资产的 SHA256 digest；本地提供的后端压缩包也必须匹配。前端压缩包必须显式给出可信 SHA256。
 - 独立 `opencode`、`opencode-web` 系统用户；独立 nginx 进程/配置/PID/日志。**不修改主 nginx、octo、其配置、证书私钥或工作目录**。
 - 后端仅监听 `127.0.0.1:4096`，由 HTTPS `:8558` 代理。所有前端和 API 请求要求 HTTP Basic 登录，后端本身也启用同一用户名/密码。官方 v1.19.5 支持 `OPENCODE_SERVER_USERNAME`，无需修改后端。
-- **每次真正安装/重装都重新询问登录用户名/密码**；初次安装生成独立自签名 IP/DNS 证书，重装保留证书、provider.env、已有配置和数据。不把秘密写入前端、命令行参数或输出。
+- **每次真正安装/重装都重新询问登录用户名/密码**；初次安装生成独立 **3650 天（约十年）** 自签名 IP/DNS 证书；重装时证书剩余不足 3285 天（约九年）会先备份旧证书/私钥，再重发 3650 天证书，否则保留原证书。provider.env、已有配置和数据原样保留。不把秘密写入前端、命令行参数或输出。
 - 服务默认工作区 `/var/lib/opencode/workspace`，不复用 octo 的 `/home/octo/workspace`。`ProtectHome=true` 防止读取其他用户的 home。自定义工作区请用 `/srv/...` 等非 home 路径；外部目录必须预先存在并授权，新安装器不会擅自 chown 其他应用的目录。
 - `autoupdate:false` 和 `OPENCODE_DISABLE_AUTOUPDATE=1` 禁止自动升级。默认仅启用 `opencode-go`，不自动选择或虚构模型。
 - 安装/验证只做版本、健康、目录、模型目录等非生成性检查，不发聊天请求、不消耗模型推理。
@@ -19,8 +19,11 @@
 
 - `opencode-web-v1.19.5-manatsu.1.tar.gz`
 - `opencode-web-v1.19.5-manatsu.1.tar.gz.sha256`
+- `opencode-deploy-v1.19.5-manatsu.1.tar.gz`（完整部署脚本，无需构建工具）
+- `opencode-deploy-v1.19.5-manatsu.1.tar.gz.sha256`
+- 中文发布说明 `RELEASE_NOTES.zh-CN.md`
 
-当前仅准备文件，尚未自动创建 release 或上传。tar 根目录必须直接包含 `index.html`、`assets/`；`FRONTEND_BUILD.json` 记录前端源码 commit。现有包的 UI 源码为 `e528c9f28f118aa87f77ff2a77cfb80c8d593196`。
+默认安装器从 `https://github.com/manatsu525/opencode/releases/download/v1.19.5-manatsu.1/` 下载部署包、前端包和各自 SHA256，校验后执行/安装。这里只准备文件，不自动创建 release 或上传；**推送分支并上传上述四个包/校验文件之前，公开一键命令不能成功**。tar 根目录必须直接包含 `index.html`、`assets/`；`FRONTEND_BUILD.json` 记录前端源码 commit。现有包的 UI 源码为 `e528c9f28f118aa87f77ff2a77cfb80c8d593196`。
 
 自己构建时，在构建机（而不是生产 VM）使用仓库指定的 Bun 版本：
 
@@ -32,15 +35,25 @@ tar -czf opencode-web-v1.19.5-manatsu.1.tar.gz -C packages/app/dist .
 sha256sum opencode-web-v1.19.5-manatsu.1.tar.gz > opencode-web-v1.19.5-manatsu.1.tar.gz.sha256
 ```
 
-不要打包 `.env`、真实 auth.json、密码或私钥。发布后可从本 fork 的 release 页面下载到目标机，再运行下列命令；安装器故意不使用尚未发布的 URL，也不盲目信任 latest。
+不要打包 `.env`、真实 auth.json、密码或私钥。安装器固定发布标签，不盲目信任 latest；SHA256 防止传输损坏，来源真实性仍依赖受信 GitHub 账号/HTTPS，不能把同站下载的摘要当独立数字签名。
 
 ## 安装
 
-下载/校验前端后，将本目录脚本一并复制到目标机。把 SHA256 换成发布包的实际可信摘要：
+发布准备完成后，在新 ARM64/AMD64 Ubuntu/Debian systemd 主机上直接运行（无需仓库、Bun 或 Node）：
 
 ```sh
-sudo bash deploy/install.sh   --host YOUR_IP_OR_DOMAIN   --frontend-archive /path/to/opencode-web-v1.19.5-manatsu.1.tar.gz   --frontend-sha256 YOUR_64_HEX_SHA256
+curl -fsSL https://raw.githubusercontent.com/manatsu525/opencode/manatsu/v1.19.5/deploy/install.sh | sudo bash
 ```
+
+若最小镜像缺少 curl/CA，先 `sudo apt-get update && sudo apt-get install -y curl ca-certificates`。管道入口会自动下载/校验固定 release 的完整 deploy 包，安全解压后运行其中的安装器；不从当前目录盲目 source 脚本。然后从 `/dev/tty` 询问公网 IP/域名（证书 SAN/访问地址）、用户名及两次隐藏密码。标准依赖缺失时通过 apt 安装。自动化可同时设置 `OPENCODE_WEB_HOST`、`OPENCODE_WEB_USER`、`OPENCODE_WEB_PASSWORD`，秘密不要写进命令参数/历史。
+
+已有本地可信包或离线安装仍可显式指定（前端路径与 SHA256 必须同时提供）：
+
+```sh
+sudo bash deploy/install.sh --host YOUR_IP_OR_DOMAIN --frontend-archive /path/to/opencode-web-v1.19.5-manatsu.1.tar.gz --frontend-sha256 YOUR_64_HEX_SHA256
+```
+
+未指定本地前端时自动下载 release 中的预构建前端及 `.sha256` 并校验，不在目标机编译。`OPENCODE_RELEASE_BASE_URL` / `OPENCODE_BACKEND_BASE_URL` 仅供显式选择可信镜像/离线回归；默认分别是本 fork 固定 release 和官方 v1.19.5 release。官方二进制始终额外匹配仓库固定摘要。覆盖部署包镜像代表信任其可执行脚本，切勿用不可信镜像。
 
 若 `opencode-ui-demo` 正在占用 8558，加 `--replace-demo`。只停止旧演示服务，保留其目录/fixtures/备份。安装器会验证新后端和 nginx 配置，再切换监听；切换失败会尝试恢复旧演示。
 
@@ -62,7 +75,9 @@ sudo bash deploy/install.sh ... --backend-archive /path/to/opencode-linux-arm64.
 sudo openssl x509 -in /etc/opencode/tls/cert.pem -noout -fingerprint -sha256
 ```
 
-正式域名可替换 `/etc/opencode/tls/cert.pem` 和 `key.pem` 为可信证书，再 reload `opencode-web`；保留 root:opencode-web 所有权，私钥 0640、TLS 目录 0750。不要改变 octo 原证书的权限。
+证书固定默认 3650 天；余期不足约九年时，安装器会把旧证书和私钥保存在 `/opt/opencode/backups/tls-*` 的 root-only 目录再更换，其他证书/尤其 octo 不会被读取或覆盖。更换自签证书后手机可能需要重新接受信任警告。
+
+正式域名可替换 `/etc/opencode/tls/cert.pem` 和 `key.pem` 为可信证书，再 reload `opencode-web`；注意之后重装也会按上述余期规则替换短期证书，使用外部证书管理时请自行备份并协调该行为。保留 root:opencode-web 所有权，私钥 0640、TLS 目录 0750。不要改变 octo 原证书的权限。
 
 ## 密码与 OpenCode Go
 
@@ -78,7 +93,8 @@ sudo --preserve-env=OPENCODE_WEB_USER,OPENCODE_WEB_PASSWORD bash deploy/install.
 unset OPENCODE_WEB_USER OPENCODE_WEB_PASSWORD
 ```
 
-- 提问不会读取安装脚本的 stdin，支持管道运行。**安装器依赖同目录的 common.sh/Python 等配套文件，并非单文件引导器**；先下载并校验完整部署包，管道运行时用 `OPENCODE_DEPLOY_DIR` 指定该目录，例如 `curl -fsS file:///absolute/path/deploy/install.sh | sudo OPENCODE_DEPLOY_DIR=/absolute/path/deploy bash -s -- ...`。首次/再次管道安装都有 PTY 回归测试。
+- 提问只读取 `/dev/tty`，不会读取脚本 stdin；支持无配套文件的 `curl | sudo bash`。入口自动下载完整部署包和校验文件，不需要预先下载 helpers。高级用法 `OPENCODE_DEPLOY_DIR` 可显式指定已校验的本地完整脚本目录。首装/重装管道提问均有 PTY 回归测试。
+
 - 登录配置文件：`/etc/opencode/server.env`，root:root 0600。只通过受信 SSH/本机安全查看，勿粘贴到聊天或日志。不要把 API key 放在这个文件里。
 - Go 提供方 ID：`opencode-go`，官方目录 URL 为 `https://opencode.ai/zen/go/v1`；其环境变量为 **OPENCODE_API_KEY**。
 - 安装器不会发明、覆盖或复用其他应用的 key；**已有 provider.env 原样保留**。新安装自行填写 root-only 文件：
@@ -131,9 +147,12 @@ sudo bash deploy/uninstall.sh --yes --purge --restore-demo
 ```sh
 (cd deploy && shellcheck -x install.sh uninstall.sh common.sh)
 bash -n deploy/{common,install,uninstall}.sh
+python3 deploy/test_release.py --frontend /path/to/frontend.tar.gz --backend /path/to/opencode-linux-x64-baseline.tar.gz
 python3 deploy/test_credentials.py --frontend /path/to/frontend.tar.gz --backend /path/to/opencode-linux-x64-baseline.tar.gz
 # 已安装 ARM/systemd 主机可加 --systemd 检查真实 EnvironmentFile 特殊字符/Unicode/末尾反斜杠解析（sudo 运行，后端和 octo 不重启）
 python3 deploy/test_deploy.py --frontend /path/to/frontend.tar.gz   --backend /path/to/opencode-linux-x64-baseline.tar.gz --report /tmp/opencode-test.json
 ```
 
-测试包含 PTY 隐藏输入、默认用户名、空密码/确认错误、无 TTY 明确失败、显式环境变量与特殊字符、真正的 `curl | bash` 首装/重装提问。另在临时 DESTDIR 中验证安装、重装、显式同凭据幂等、凭据更换且 provider/证书不变、备份、卸载/清空、架构选择和路径穿越拦截；AMD64 还实际启动官方 serve 二进制，验证带认证 health 和未认证 401，不发生成请求。它不是“完整 x86 systemd 安装测试”；生产 ARM64 VM 上另做真实 systemd/HTTPS/SSE 验证。
+发布测试使用本机 HTTP fixture 镜像模拟尚未发布的 release，验证不带参数/无 helpers 的真实 `curl | bash` 默认下载链路、摘要损坏拒绝、临时文件清理，以及 3650 天证书/九年余期换证/私密备份。它不是公开 GitHub release 已上传的证明。
+
+其他测试包含 PTY 隐藏输入、默认用户名、空密码/确认错误、无 TTY 明确失败、显式环境变量与特殊字符、真正的 `curl | bash` 首装/重装提问。另在临时 DESTDIR 中验证安装、重装、显式同凭据幂等、凭据更换且 provider/证书不变、备份、卸载/清空、架构选择和路径穿越拦截；AMD64 还实际启动官方 serve 二进制，验证带认证 health 和未认证 401，不发生成请求。它不是“完整 x86 systemd 安装测试”；生产 ARM64 VM 上另做真实 systemd/HTTPS/SSE 验证。

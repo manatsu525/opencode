@@ -1,11 +1,58 @@
 #!/usr/bin/env bash
 # Ubuntu/Debian systemd deployment; never changes octo or the main nginx service.
 set -euo pipefail
-install_source=${OPENCODE_DEPLOY_DIR:-$(dirname -- "${BASH_SOURCE[0]:-.}")}
-[[ -f "$install_source/common.sh" ]] || { printf 'Download the complete verified deploy bundle; set OPENCODE_DEPLOY_DIR to its deploy directory.\n' >&2; exit 1; }
+# A piped script must not source helpers from an untrusted current directory.
+RELEASE_TAG=v1.19.5-manatsu.1
+RELEASE_BASE=${OPENCODE_RELEASE_BASE_URL:-https://github.com/manatsu525/opencode/releases/download/$RELEASE_TAG}
+FRONTEND_ASSET=opencode-web-$RELEASE_TAG.tar.gz
+DEPLOY_ASSET=opencode-deploy-$RELEASE_TAG.tar.gz
+CERT_DAYS=3650
+fetch() { curl --fail --silent --show-error --location --retry 3 --connect-timeout 20 --max-time 300 "$1" --output "$2"; }
+checksum() {
+  local digest name extra
+  [[ $(wc -l < "$1") -eq 1 ]] || { printf 'Invalid release checksum file\n' >&2; return 1; }
+  read -r digest name extra < "$1"
+  [[ "$digest" =~ ^[a-fA-F0-9]{64}$ && "$name" == "$2" && -z "$extra" ]] || { printf 'Invalid release checksum entry\n' >&2; return 1; }
+  printf '%s' "$digest"
+}
+install_source=${OPENCODE_DEPLOY_DIR:-}
+if [[ -z "$install_source" && -n "${BASH_SOURCE[0]:-}" ]]; then
+  install_source=$(dirname -- "${BASH_SOURCE[0]}")
+fi
+if [[ -z "$install_source" || ! -f "$install_source/common.sh" ]]; then
+  if [[ -z "${DESTDIR:-}" ]]; then
+    (( EUID == 0 )) || { printf 'Run the one-click installer with sudo bash\n' >&2; exit 1; }
+    [[ -d /run/systemd/system ]] || { printf 'Ubuntu/Debian with running systemd is required\n' >&2; exit 1; }
+    if ! command -v python3 >/dev/null || ! command -v curl >/dev/null || ! command -v tar >/dev/null; then
+      apt-get update -qq
+      DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-upgrade --no-install-recommends ca-certificates curl python3 tar
+    fi
+  fi
+  bootstrap=$(mktemp -d)
+  trap 'rm -rf -- "$bootstrap"' EXIT
+  fetch "$RELEASE_BASE/$DEPLOY_ASSET" "$bootstrap/$DEPLOY_ASSET"
+  fetch "$RELEASE_BASE/$DEPLOY_ASSET.sha256" "$bootstrap/$DEPLOY_ASSET.sha256"
+  bootstrap_sha=$(checksum "$bootstrap/$DEPLOY_ASSET.sha256" "$DEPLOY_ASSET")
+  printf '%s  %s\n' "$bootstrap_sha" "$bootstrap/$DEPLOY_ASSET" | sha256sum -c - >/dev/null
+  # Validate member paths/types before running any code from the verified bundle.
+  python3 - "$bootstrap/$DEPLOY_ASSET" "$bootstrap" <<'BOOTSTRAP_PY'
+import pathlib, sys, tarfile
+with tarfile.open(sys.argv[1], "r:gz") as archive:
+    members = archive.getmembers()
+    for member in members:
+        path = pathlib.PurePosixPath(member.name)
+        if path.is_absolute() or ".." in path.parts or not path.parts or path.parts[0] != "deploy" or not (member.isfile() or member.isdir()):
+            raise SystemExit("Unsafe deployment bundle member")
+        member.mode &= 0o755
+    archive.extractall(sys.argv[2], members=members)
+BOOTSTRAP_PY
+  [[ -f "$bootstrap/deploy/install.sh" && -f "$bootstrap/deploy/common.sh" ]] || { printf 'Incomplete deployment bundle\n' >&2; exit 1; }
+  OPENCODE_DEPLOY_DIR="$bootstrap/deploy" bash "$bootstrap/deploy/install.sh" "$@"
+  exit 0
+fi
 # shellcheck source=common.sh
 source "$install_source/common.sh"
-host='' port=8558 backend_port=4096 workspace=/var/lib/opencode/workspace
+host=${OPENCODE_WEB_HOST:-} port=8558 backend_port=4096 workspace=/var/lib/opencode/workspace
 frontend='' frontend_sha='' backend='' replace_demo=0 no_firewall=0 dry_run=0
 while (($#)); do
   case "$1" in
@@ -22,21 +69,29 @@ while (($#)); do
     *) fail "Unknown option: $1" ;;
   esac
 done
-[[ "$host" =~ ^[A-Za-z0-9.:_-]+$ ]] || fail '--host is required (IP or hostname, no scheme/path)'
+if [[ -z "$host" ]]; then
+  if ((dry_run)); then host=YOUR_IP_OR_DOMAIN
+  elif ! read -r -p 'Public IP or domain for HTTPS (required): ' host </dev/tty; then
+    fail 'Host input unavailable: set OPENCODE_WEB_HOST or pass --host (and supply login automation variables)'
+  fi
+fi
+[[ "$host" =~ ^[A-Za-z0-9.:_-]+$ ]] || fail 'A public IP or hostname is required (no scheme/path)'
 if ! validate_port "$port" || ! validate_port "$backend_port"; then fail 'Invalid nonprivileged port'; fi
 [[ "$port" != "$backend_port" ]] || fail 'Public and internal ports must differ'
 for candidate in "$port" "$backend_port"; do
   case "$candidate" in 8557|8088|8090) fail 'Refusing reserved octo ports' ;; esac
 done
 [[ "$workspace" =~ ^/[A-Za-z0-9_./-]+$ && "$workspace" != *..* ]] || fail 'Use a simple absolute workspace path without .. or spaces'
-[[ "$frontend_sha" =~ ^[a-fA-F0-9]{64}$ ]] || fail '--frontend-sha256 is required'
-[[ -f "$frontend" ]] || fail '--frontend-archive must name a local verified release tarball'
+if [[ -n "$frontend" || -n "$frontend_sha" ]]; then
+  [[ "$frontend_sha" =~ ^[a-fA-F0-9]{64}$ ]] || fail '--frontend-sha256 is required with a local archive'
+  [[ -f "$frontend" ]] || fail '--frontend-archive must name a local verified release tarball'
+fi
 case "$workspace" in /home|/home/*|/root|/root/*) fail 'The service protects /home and /root; use an isolated /var/lib/opencode or /srv workspace' ;; esac
 asset=$(asset_name "${OPENCODE_ARCH:-$(uname -m)}" "${OPENCODE_LIBC:-auto}")
 expected=$(awk -v name="$asset" '$2 == name {print $1}' "$HERE/official-v1.19.5.sha256")
 [[ -n "$expected" ]] || fail 'No pinned checksum for selected backend'
 printf 'Pinned backend: %s (%s); HTTPS :%s -> 127.0.0.1:%s; workspace %s\n' "$VERSION" "$asset" "$port" "$backend_port" "$workspace"
-if ((dry_run)); then exit 0; fi
+if ((dry_run)); then printf 'Frontend release: %s/%s (+ .sha256); certificate: %s days\n' "$RELEASE_BASE" "$FRONTEND_ASSET" "$CERT_DAYS"; exit 0; fi
 if [[ -z "$ROOT" ]]; then
   (( EUID == 0 )) || fail 'Run with sudo/root'
   if [[ ! -f /etc/opencode/install.json && ( -e /etc/systemd/system/opencode.service || -e /etc/systemd/system/opencode-web.service ) ]]; then
@@ -50,7 +105,7 @@ if [[ -z "$ROOT" ]]; then
   done
   if ((missing)); then
     apt-get update -qq
-    DEBIAN_FRONTEND=noninteractive apt-get install -y -qq ca-certificates curl python3 openssl nginx tar iproute2
+    DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-upgrade --no-install-recommends ca-certificates curl python3 openssl nginx tar iproute2
   fi
 fi
 tmp=$(mktemp -d)
@@ -67,10 +122,16 @@ finish() {
 trap finish EXIT
 # Always collect explicit login input, before downloads or changes to the live login.
 python3 "$HERE/credentials.py" "$tmp/login.json"
+if [[ -z "$frontend" ]]; then
+  frontend="$tmp/$FRONTEND_ASSET"
+  fetch "$RELEASE_BASE/$FRONTEND_ASSET" "$frontend"
+  fetch "$RELEASE_BASE/$FRONTEND_ASSET.sha256" "$frontend.sha256"
+  frontend_sha=$(checksum "$frontend.sha256" "$FRONTEND_ASSET")
+fi
 printf '%s  %s\n' "$frontend_sha" "$frontend" | sha256sum -c - >/dev/null
 if [[ -z "$backend" ]]; then
   backend="$tmp/$asset"
-  curl --fail --location --retry 3 --connect-timeout 20 --max-time 300 "https://github.com/anomalyco/opencode/releases/download/v$VERSION/$asset" --output "$backend"
+  fetch "${OPENCODE_BACKEND_BASE_URL:-https://github.com/anomalyco/opencode/releases/download/v$VERSION}/$asset" "$backend"
 fi
 [[ -f "$backend" ]] || fail 'Backend archive not found'
 printf '%s  %s\n' "$expected" "$backend" | sha256sum -c - >/dev/null
@@ -88,7 +149,7 @@ if [[ -d "$(path /opt/opencode/frontend)" ]]; then
   mv "$(path /opt/opencode/frontend)" "$(path /opt/opencode/backups)/frontend-$(date +%Y%m%d-%H%M%S)-$$"
 fi
 mv "$tmp/frontend" "$(path /opt/opencode/frontend)"
-python3 "$HERE/render.py" "$ROOT" "$host" "$port" "$backend_port" "$workspace" "$tmp/login.json"
+python3 "$HERE/render.py" "$ROOT" "$host" "$port" "$backend_port" "$workspace" "$tmp/login.json" "$CERT_DAYS"
 if [[ -n "$ROOT" ]]; then
   mkdir -p "$(path /var/lib/opencode/workspace)"
   printf 'Staged files only under %s; no users, services or firewall modified.\n' "$ROOT"

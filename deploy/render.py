@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Render isolated system services. Secret values are never printed or passed in argv."""
-import ipaddress, json, pathlib, subprocess, sys
+import json, pathlib, subprocess, sys
 from credentials import atomic_write, read_env, validate, write_env
+from tls import ensure_certificate
 VERSION = "1.19.5"
-root, host, port, backend_port, workspace, login_file = sys.argv[1:]
+root, host, port, backend_port, workspace, login_file, cert_days = sys.argv[1:]
 def p(name): return pathlib.Path(root + name)
 def write(name, value, mode=0o644):
     file = p(name); file.parent.mkdir(parents=True, exist_ok=True)
@@ -25,13 +26,7 @@ if not p("/etc/opencode/provider.env").exists():
     write("/etc/opencode/provider.env", "# Add your real OpenCode Go key here, then restart opencode.\n# OPENCODE_API_KEY=\n", 0o600)
 if not p("/etc/opencode/opencode.json").exists():
     write("/etc/opencode/opencode.json", json.dumps({"$schema":"https://opencode.ai/config.json", "autoupdate":False, "enabled_providers":["opencode-go"]}, indent=2)+"\n")
-try: ipaddress.ip_address(host); san = "IP:" + host
-except ValueError: san = "DNS:" + host
-cert, key = p("/etc/opencode/tls/cert.pem"), p("/etc/opencode/tls/key.pem")
-if not cert.exists() and not key.exists():
-    subprocess.run(["openssl", "req", "-x509", "-newkey", "rsa:3072", "-sha256", "-days", "825", "-nodes", "-subj", "/CN="+host, "-addext", "subjectAltName="+san, "-keyout", str(key), "-out", str(cert)], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-if not cert.exists() or not key.exists(): raise SystemExit("Incomplete TLS certificate/key pair")
-key.chmod(0o640); cert.chmod(0o644)
+ensure_certificate(p("/etc/opencode/tls"), p("/opt/opencode/backups"), host, int(cert_days))
 backend = f"""[Unit]
 Description=Official OpenCode {VERSION} backend
 After=network-online.target
