@@ -45,6 +45,8 @@ import { ToolErrorCard } from "./tool-error-card"
 import { Checkbox } from "@opencode-ai/ui/checkbox"
 import { DiffChanges } from "@opencode-ai/ui/diff-changes"
 import { Markdown } from "./markdown"
+import { ChatImage, ToolImages } from "./chat-image"
+import { safeImageUrl } from "./image-source"
 import { ImagePreview } from "@opencode-ai/ui/image-preview"
 import { getDirectory as _getDirectory, getFilename } from "@opencode-ai/core/util/path"
 import { AttachmentCardV2 } from "../v2/components/attachment-card-v2"
@@ -714,6 +716,7 @@ export function renderable(part: PartType, showReasoningSummaries = true) {
     if (part.tool === "question") return part.state.status !== "pending" && part.state.status !== "running"
     return true
   }
+  if (part.type === "file") return part.mime.startsWith("image/") && !!safeImageUrl(part.url)
   if (part.type === "text") return !!part.text?.trim()
   if (part.type === "reasoning") return showReasoningSummaries && !!part.text?.trim()
   return !!PART_MAPPING[part.type]
@@ -785,6 +788,7 @@ export function AssistantParts(props: {
                 return (
                   <Show when={parts().length > 0}>
                     <ContextToolGroup parts={parts()} busy={busy()} />
+                    <For each={parts()}>{(part) => <ToolImages part={part} />}</For>
                   </Show>
                 )
               })()}
@@ -1009,6 +1013,7 @@ export function AssistantMessageDisplay(props: {
                 return (
                   <Show when={parts().length > 0}>
                     <ContextToolGroup parts={parts()} />
+                    <For each={parts()}>{(part) => <ToolImages part={part} />}</For>
                   </Show>
                 )
               })()}
@@ -1627,7 +1632,17 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
             />
           </Match>
         </Switch>
+        <ToolImages part={part()} />
       </div>
+    </Show>
+  )
+}
+
+PART_MAPPING["file"] = function AssistantImagePart(props) {
+  const file = () => props.part as FilePart
+  return (
+    <Show when={file().mime.startsWith("image/")}>
+      <ChatImage url={file().url} alt={file().filename || "Assistant image"} />
     </Show>
   )
 }

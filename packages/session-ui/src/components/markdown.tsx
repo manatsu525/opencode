@@ -33,6 +33,7 @@ import { shouldResetCodeTokens, type RenderedCodeState } from "./markdown-code-s
 import { getCachedMarkdown, sanitizeMarkdown, touchCachedMarkdown, type MarkdownCacheEntry } from "./markdown-cache"
 import { inlineCodeKind } from "./markdown-inline-code-kind"
 import { setupMermaid } from "./mermaid"
+import { setupInlineImages } from "./inline-images"
 import { closedMermaidFence } from "./mermaid-source"
 
 type RenderedBlock =
@@ -494,7 +495,10 @@ export function Markdown(
 
   createEffect(() => {
     const container = root()
-    if (container && !isServer) onCleanup(setupMermaid(container))
+    if (container && !isServer) {
+      onCleanup(setupMermaid(container))
+      onCleanup(setupInlineImages(container))
+    }
   })
 
   let copyCleanup: (() => void) | undefined

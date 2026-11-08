@@ -1,5 +1,6 @@
 import { checksum } from "@opencode-ai/core/util/encode"
 import DOMPurify from "dompurify"
+import { prepareImage } from "./inline-images"
 import { parseMarkdown } from "./markdown-worker"
 
 export type MarkdownCacheEntry = {
@@ -21,6 +22,7 @@ const config = {
 
 if (typeof window !== "undefined" && DOMPurify.isSupported) {
   DOMPurify.addHook("afterSanitizeAttributes", (node: Element) => {
+    if (node instanceof HTMLImageElement) prepareImage(node)
     if (!(node instanceof HTMLAnchorElement)) return
     if (node.target !== "_blank") return
 

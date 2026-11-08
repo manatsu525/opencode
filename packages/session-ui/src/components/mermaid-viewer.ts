@@ -1,5 +1,5 @@
-// The viewer moves an already-sanitized SVG, preserving Mermaid's scoped styles
-// and fragment IDs without introducing another copy into the document.
+// Move the original SVG/image instead of cloning it: preserve scoped Mermaid's
+// styles and fragment IDs, and avoid duplicate image requests.
 import './mermaid-viewer.css'
 
 export type ViewTransform = { x: number; y: number; scale: number }
@@ -10,7 +10,8 @@ export function zoomAt(v: ViewTransform, factor: number, x: number, y: number): 
 }
 let activeClose: (() => void) | undefined
 
-export function openMermaidViewer(svg: SVGSVGElement): () => void {
+export function openMediaViewer(svg: SVGSVGElement | HTMLImageElement): () => void {
+  const image = svg instanceof HTMLImageElement
   activeClose?.()
   const labels: Record<string, string> = {
     'chat.diagram_viewer': 'Diagram viewer',
@@ -29,7 +30,8 @@ export function openMermaidViewer(svg: SVGSVGElement): () => void {
   const originalStyle = svg.getAttribute('style')
   const dialog = document.createElement('dialog')
   dialog.className = 'mermaid-viewer'
-  dialog.setAttribute('aria-label', translate('chat.diagram_viewer'))
+  dialog.setAttribute('aria-label', image ? 'Image viewer' : translate('chat.diagram_viewer'))
+  dialog.setAttribute('data-media-viewer', image ? 'image' : 'diagram')
   const toolbar = document.createElement('div')
   toolbar.className = 'mermaid-viewer-toolbar'
   const stage = document.createElement('div')
@@ -41,8 +43,8 @@ export function openMermaidViewer(svg: SVGSVGElement): () => void {
   document.body.append(dialog)
   canvas.append(svg)
   const box = svg.getAttribute('viewBox')?.trim().split(/[ ,]+/).map(Number)
-  const width = Math.max(1, box?.[2] || parseFloat(svg.getAttribute('width') || '') || 800)
-  const height = Math.max(1, box?.[3] || parseFloat(svg.getAttribute('height') || '') || 600)
+  const width = Math.max(1, (image ? svg.naturalWidth : box?.[2]) || parseFloat(svg.getAttribute('width') || '') || 800)
+  const height = Math.max(1, (image ? svg.naturalHeight : box?.[3]) || parseFloat(svg.getAttribute('height') || '') || 600)
   svg.style.cssText = `display:block;width:${width}px;height:${height}px;max-width:none;max-height:none;`
   let view: ViewTransform = { x: 0, y: 0, scale: 1 }
   let fitScale = 1
@@ -172,6 +174,11 @@ export function openMermaidViewer(svg: SVGSVGElement): () => void {
   closeButton.focus()
   activeClose = close
   return close
+}
+
+/** Kept for the Mermaid integration; images use the same gesture engine and modal. */
+export function openMermaidViewer(svg: SVGSVGElement): () => void {
+  return openMediaViewer(svg)
 }
 
 /** Delegation also handles diagrams replaced during streamed markdown updates. */

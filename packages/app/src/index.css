@@ -328,3 +328,14 @@
     }
   }
 }
+
+
+/* iOS focuses small controls by zooming the whole page; viewport alone is not enough. */
+html, body { touch-action: pan-x pan-y; -webkit-text-size-adjust: 100%; }
+@media (max-width: 800px), (pointer: coarse) {
+  input, textarea, [contenteditable]:not([contenteditable="false"]) {
+    font-size: max(16px, 1em) !important;
+    touch-action: manipulation;
+  }
+  [contenteditable]:not([contenteditable="false"]) * { font-size: inherit !important; }
+}
