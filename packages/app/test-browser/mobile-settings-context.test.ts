@@ -61,8 +61,11 @@ test("MCP image FileParts render inline and open the existing zoom viewer", () =
 
 test("both context ring views share cumulative cache statistics and omit cost", () => {
  const source = readFileSync(new URL("../src/components/session-context-usage.tsx", import.meta.url), "utf8")
- for (const key of ["sessionInput", "sessionOutput", "sessionReasoning", "sessionCacheRead", "sessionCacheWrite", "sessionCacheHitRate"]) expect(source).toContain(`context.usage.${key}`)
+ for (const key of ["sessionTotal", "sessionInput", "sessionOutput", "sessionReasoning", "sessionCacheRead", "sessionCacheWrite", "sessionCacheHitRate"]) expect(source).toContain(`context.usage.${key}`)
  expect(source).not.toContain('context.usage.cost')
+ expect(source.indexOf('context.usage.sessionTotal')).toBeGreaterThan(source.indexOf('context.usage.tokens'))
+ expect(source.indexOf('context.usage.sessionTotal')).toBeLessThan(source.indexOf('context.usage.sessionInput'))
+ expect(source).toContain('tokenNumber(tokenUsage().total)')
  expect(source).toContain('tooltipValue(true)'); expect(source).toContain('value={tooltipValue()}')
  expect(source).toContain('w-[280px]'); expect(source).toContain('minimumFractionDigits: 1')
  expect(source).toContain('rate === null ? "-"')

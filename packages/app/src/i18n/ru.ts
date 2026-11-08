@@ -600,7 +600,8 @@ export const dict = {
   "context.stats.sessionCreated": "Сессия создана",
   "context.stats.lastActivity": "Последняя активность",
 
-  "context.usage.tokens": "Токены",
+  "context.usage.tokens": "Текущий контекст",
+  "context.usage.sessionTotal": "Всего токенов за сессию",
   "context.usage.sessionInput": "Session input",
   "context.usage.sessionOutput": "Session output",
   "context.usage.sessionReasoning": "Session reasoning",

@@ -601,7 +601,8 @@ export const dict = {
   "context.stats.sessionCreated": "Sesija kreirana",
   "context.stats.lastActivity": "Posljednja aktivnost",
 
-  "context.usage.tokens": "Tokeni",
+  "context.usage.tokens": "Current context",
+  "context.usage.sessionTotal": "Session total tokens",
   "context.usage.sessionInput": "Session input",
   "context.usage.sessionOutput": "Session output",
   "context.usage.sessionReasoning": "Session reasoning",

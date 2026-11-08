@@ -506,7 +506,8 @@ export const dict = {
   "context.stats.sessionCreated": "Sesjon opprettet",
   "context.stats.lastActivity": "Siste aktivitet",
 
-  "context.usage.tokens": "Tokener",
+  "context.usage.tokens": "Current context",
+  "context.usage.sessionTotal": "Session total tokens",
   "context.usage.sessionInput": "Session input",
   "context.usage.sessionOutput": "Session output",
   "context.usage.sessionReasoning": "Session reasoning",

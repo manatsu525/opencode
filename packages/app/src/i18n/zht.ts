@@ -593,7 +593,8 @@ export const dict = {
   "context.stats.sessionCreated": "建立時間",
   "context.stats.lastActivity": "最後活動",
 
-  "context.usage.tokens": "Token",
+  "context.usage.tokens": "目前上下文",
+  "context.usage.sessionTotal": "累計總 Token",
   "context.usage.sessionInput": "累計輸入",
   "context.usage.sessionOutput": "累計輸出",
   "context.usage.sessionReasoning": "累計推理",

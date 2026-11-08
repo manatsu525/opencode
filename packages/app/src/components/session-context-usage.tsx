@@ -133,6 +133,7 @@ export function SessionContextUsage(props: SessionContextUsageProps) {
         name={language.t("context.usage.tokens")}
         value={context()?.total.toLocaleString(language.intl()) ?? "0"}
       />
+      <ContextTooltipRow name={language.t("context.usage.sessionTotal")} value={tokenNumber(tokenUsage().total)} />
       <ContextTooltipRow name={language.t("context.usage.sessionInput")} value={tokenNumber(tokenUsage().input)} />
       <ContextTooltipRow name={language.t("context.usage.sessionOutput")} value={tokenNumber(tokenUsage().output)} />
       <ContextTooltipRow name={language.t("context.usage.sessionReasoning")} value={tokenNumber(tokenUsage().reasoning)} />

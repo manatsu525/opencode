@@ -611,7 +611,8 @@ export const dict = {
   "context.stats.sessionCreated": "Sesi Dibuat",
   "context.stats.lastActivity": "Aktivitas Terakhir",
 
-  "context.usage.tokens": "Token",
+  "context.usage.tokens": "Current context",
+  "context.usage.sessionTotal": "Session total tokens",
   "context.usage.sessionInput": "Session input",
   "context.usage.sessionOutput": "Session output",
   "context.usage.sessionReasoning": "Session reasoning",

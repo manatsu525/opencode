@@ -603,7 +603,8 @@ export const dict = {
   "context.stats.sessionCreated": "Sesión creada",
   "context.stats.lastActivity": "Última actividad",
 
-  "context.usage.tokens": "Tokens",
+  "context.usage.tokens": "Contexto actual",
+  "context.usage.sessionTotal": "Tokens totales de la sesión",
   "context.usage.sessionInput": "Session input",
   "context.usage.sessionOutput": "Session output",
   "context.usage.sessionReasoning": "Session reasoning",

@@ -104,11 +104,12 @@ describe("getSessionTokenUsage", () => {
       user("u1"), assistant("a1", { input: 100, output: 10, reasoning: 5, read: 300, write: 50 }, 0),
       user("u2"), assistant("a2", { input: 200, output: 20, reasoning: 7, read: 500, write: 50 }, 0),
     ])
-    expect(usage).toEqual({ input: 300, output: 30, reasoning: 12, cache: { read: 800, write: 100 }, cacheHitRate: 800 / 1200 })
+    expect(usage).toEqual({ input: 300, output: 30, reasoning: 12, cache: { read: 800, write: 100 }, total: 1242, cacheHitRate: 800 / 1200 })
     expect(new Intl.NumberFormat("en", { style: "percent", minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(usage.cacheHitRate!)).toBe("66.7%")
   })
   test("zero denominator is unknown, but uncached input has a real zero hit rate", () => {
     expect(getSessionTokenUsage().cacheHitRate).toBeNull()
+    expect(getSessionTokenUsage().total).toBe(0)
     expect(getSessionTokenUsage([assistant("a", { input: 10, output: 0, reasoning: 0, read: 0, write: 0 }, 0)]).cacheHitRate).toBe(0)
   })
   test("cache writes belong in the denominator, output and reasoning do not", () => {
@@ -116,6 +117,16 @@ describe("getSessionTokenUsage", () => {
   })
   test("uses official cumulative counters instead of a partial visible history page", () => {
     const usage = getSessionTokenUsage([assistant("last", { input: 1, output: 1, reasoning: 0, read: 0, write: 0 }, 0)], { input: 30, output: 9, reasoning: 2, cache: { read: 60, write: 10 } })
-    expect(usage.input).toBe(30); expect(usage.output).toBe(9); expect(usage.cacheHitRate).toBe(0.6)
+    expect(usage.total).toBe(111); expect(usage.input).toBe(30); expect(usage.output).toBe(9); expect(usage.cacheHitRate).toBe(0.6)
   })
+})
+
+
+test("current context and cumulative total tokens remain distinct", () => {
+  const messages = [
+    assistant("first", { input: 10, output: 2, reasoning: 3, read: 20, write: 5 }, 0),
+    assistant("last", { input: 100, output: 20, reasoning: 30, read: 200, write: 50 }, 0),
+  ]
+  expect(getSessionContext(messages)?.total).toBe(400)
+  expect(getSessionTokenUsage(messages).total).toBe(440)
 })

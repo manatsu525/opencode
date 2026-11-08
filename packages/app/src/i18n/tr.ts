@@ -604,7 +604,8 @@ export const dict = {
   "context.stats.sessionCreated": "Oturum Oluşturma",
   "context.stats.lastActivity": "Son Etkinlik",
 
-  "context.usage.tokens": "Tokenler",
+  "context.usage.tokens": "Geçerli bağlam",
+  "context.usage.sessionTotal": "Oturum toplam token sayısı",
   "context.usage.sessionInput": "Session input",
   "context.usage.sessionOutput": "Session output",
   "context.usage.sessionReasoning": "Session reasoning",

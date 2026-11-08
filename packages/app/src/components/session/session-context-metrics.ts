@@ -78,5 +78,5 @@ export function getSessionTokenUsage(messages: Message[] = [], aggregate?: Assis
   if (aggregate) add(aggregate)
   else for (const message of messages) if (message.role === "assistant" && message.tokens) add(message.tokens)
   const inputTotal = tokens.input + tokens.cache.read + tokens.cache.write
-  return { ...tokens, cacheHitRate: inputTotal > 0 ? tokens.cache.read / inputTotal : null }
+  return { ...tokens, total: inputTotal + tokens.output + tokens.reasoning, cacheHitRate: inputTotal > 0 ? tokens.cache.read / inputTotal : null }
 }

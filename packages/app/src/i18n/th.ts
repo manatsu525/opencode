@@ -596,7 +596,8 @@ export const dict = {
   "context.stats.sessionCreated": "สร้างเซสชันเมื่อ",
   "context.stats.lastActivity": "กิจกรรมล่าสุด",
 
-  "context.usage.tokens": "โทเค็น",
+  "context.usage.tokens": "Current context",
+  "context.usage.sessionTotal": "Session total tokens",
   "context.usage.sessionInput": "Session input",
   "context.usage.sessionOutput": "Session output",
   "context.usage.sessionReasoning": "Session reasoning",
