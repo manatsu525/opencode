@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Render isolated system services. Secret values are never printed or passed in argv."""
-import ipaddress, json, pathlib, secrets, subprocess, sys
+import ipaddress, json, pathlib, subprocess, sys
+from credentials import atomic_write, read_env, validate, write_env
 VERSION = "1.19.5"
-root, host, port, backend_port, workspace = sys.argv[1:]
+root, host, port, backend_port, workspace, login_file = sys.argv[1:]
 def p(name): return pathlib.Path(root + name)
 def write(name, value, mode=0o644):
     file = p(name); file.parent.mkdir(parents=True, exist_ok=True)
@@ -12,14 +13,14 @@ for folder in ["/etc/opencode", "/etc/opencode/tls", "/var/lib/opencode", "/var/
 p("/etc/opencode").chmod(0o755)
 p("/etc/opencode/tls").chmod(0o750)
 server = p("/etc/opencode/server.env")
-if not server.exists():
-    write("/etc/opencode/server.env", "OPENCODE_SERVER_USERNAME=opencode\nOPENCODE_SERVER_PASSWORD=" + secrets.token_urlsafe(48) + "\nOPENCODE_DISABLE_AUTOUPDATE=1\n", 0o600)
-else: server.chmod(0o600)
-values = dict(line.split("=", 1) for line in server.read_text().splitlines() if "=" in line and not line.startswith("#"))
-password = values["OPENCODE_SERVER_PASSWORD"]
-if not password or values.get("OPENCODE_SERVER_USERNAME") != "opencode": raise SystemExit("Invalid server credential file")
+login = json.loads(pathlib.Path(login_file).read_text())
+username, password = login["username"], login["password"]
+validate(username, password)
+values = read_env(server)
+values.update(OPENCODE_SERVER_USERNAME=username, OPENCODE_SERVER_PASSWORD=password, OPENCODE_DISABLE_AUTOUPDATE="1")
+write_env(server, values)
 hashed = subprocess.check_output(["openssl", "passwd", "-6", "-stdin"], input=password.encode()).decode().strip()
-write("/etc/opencode/htpasswd", "opencode:" + hashed + "\n", 0o640)
+atomic_write(p("/etc/opencode/htpasswd"), username + ":" + hashed + "\n", 0o640)
 if not p("/etc/opencode/provider.env").exists():
     write("/etc/opencode/provider.env", "# Add your real OpenCode Go key here, then restart opencode.\n# OPENCODE_API_KEY=\n", 0o600)
 if not p("/etc/opencode/opencode.json").exists():

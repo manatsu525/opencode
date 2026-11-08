@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Safe AMD64 staging/idempotence/purge and native backend smoke test (no system changes)."""
 import argparse, base64, hashlib, io, json, os, pathlib, socket, subprocess, tarfile, tempfile, time, urllib.error, urllib.request
+from credentials import read_env
 parser=argparse.ArgumentParser();parser.add_argument("--frontend",required=True);parser.add_argument("--backend",required=True);parser.add_argument("--report",required=True);args=parser.parse_args()
 here=pathlib.Path(__file__).resolve().parent
 sha=hashlib.sha256(pathlib.Path(args.frontend).read_bytes()).hexdigest()
@@ -10,7 +11,7 @@ def check(name,condition):
     checks.append(name)
 with tempfile.TemporaryDirectory(prefix="opencode-deploy-test-") as temp:
     root=pathlib.Path(temp)/"root";root.mkdir()
-    env={**os.environ,"DESTDIR":str(root),"OPENCODE_ARCH":"x86_64","OPENCODE_LIBC":"glibc"}
+    env={**os.environ,"DESTDIR":str(root),"OPENCODE_ARCH":"x86_64","OPENCODE_LIBC":"glibc","OPENCODE_WEB_USER":"test-admin","OPENCODE_WEB_PASSWORD":"test password $special \"quoted\"\\end"}
     command=["bash",str(here/"install.sh"),"--host","127.0.0.1","--frontend-archive",str(pathlib.Path(args.frontend).resolve()),"--frontend-sha256",sha,"--backend-archive",str(pathlib.Path(args.backend).resolve())]
     def install():subprocess.run(command,env=env,check=True,stdout=subprocess.DEVNULL)
     install()
@@ -22,13 +23,17 @@ with tempfile.TemporaryDirectory(prefix="opencode-deploy-test-") as temp:
     check("idempotent server password",hashlib.sha256(credential.read_bytes()).hexdigest()==secret_hash)
     check("idempotent certificate",hashlib.sha256((root/"etc/opencode/tls/cert.pem").read_bytes()).hexdigest()==cert_hash)
     check("frontend backup retained",bool(list((root/"opt/opencode/backups").iterdir())))
+    check("custom username rendered", read_env(credential)["OPENCODE_SERVER_USERNAME"] == env["OPENCODE_WEB_USER"])
+    password_hash = (root/"etc/opencode/htpasswd").read_text().split(":", 1)[1].strip()
+    recomputed = subprocess.check_output(["openssl","passwd","-6","-salt",password_hash.split("$")[2],"-stdin"], input=env["OPENCODE_WEB_PASSWORD"].encode()).decode().strip()
+    check("nginx hash matches special-character password", recomputed == password_hash)
     binary=root/"opt/opencode/bin/opencode"
     check("native AMD64 official version",subprocess.check_output([str(binary),"--version"],text=True).strip()=="1.19.5")
-    values=dict(line.split("=",1) for line in credential.read_text().splitlines() if "=" in line)
+    values=read_env(credential)
     native_env={**os.environ,**values,"HOME":str(root/"var/lib/opencode"),"XDG_DATA_HOME":str(root/"var/lib/opencode/data"),"XDG_CONFIG_HOME":str(root/"var/lib/opencode/config"),"XDG_CACHE_HOME":str(root/"var/cache/opencode"),"XDG_STATE_HOME":str(root/"var/lib/opencode/state"),"OPENCODE_CONFIG":str(root/"etc/opencode/opencode.json"),"OPENCODE_DISABLE_MODELS_FETCH":"1"}
     native_env.pop("OPENCODE_API_KEY",None)
     with socket.socket() as sock:sock.bind(("127.0.0.1",0));port=sock.getsockname()[1]
-    token=base64.b64encode(("opencode:"+values["OPENCODE_SERVER_PASSWORD"]).encode()).decode()
+    token=base64.b64encode((values["OPENCODE_SERVER_USERNAME"]+":"+values["OPENCODE_SERVER_PASSWORD"]).encode()).decode()
     opener=urllib.request.build_opener(urllib.request.ProxyHandler({}))
     with (root/"backend-smoke.log").open("wb") as log:
         process=subprocess.Popen([str(binary),"serve","--hostname","127.0.0.1","--port",str(port)],env=native_env,cwd=root/"var/lib/opencode/workspace",stdout=log,stderr=log)
@@ -49,6 +54,15 @@ with tempfile.TemporaryDirectory(prefix="opencode-deploy-test-") as temp:
             process.terminate()
             try:process.wait(timeout=10)
             except subprocess.TimeoutExpired:process.kill();process.wait()
+    provider = root/"etc/opencode/provider.env"
+    provider.write_text("OPENCODE_API_KEY=test-provider-placeholder\n"); provider.chmod(0o600)
+    before_provider = provider.read_bytes()
+    env.update(OPENCODE_WEB_USER="rotated-admin", OPENCODE_WEB_PASSWORD="rotated-test-only-password")
+    install()
+    check("reinstall rotates selected credentials", read_env(credential)["OPENCODE_SERVER_USERNAME"] == env["OPENCODE_WEB_USER"] and read_env(credential)["OPENCODE_SERVER_PASSWORD"] == env["OPENCODE_WEB_PASSWORD"])
+    check("provider secret preserved when rotating login", provider.read_bytes() == before_provider and provider.stat().st_mode & 0o777 == 0o600)
+    check("certificate preserved when rotating login", hashlib.sha256((root/"etc/opencode/tls/cert.pem").read_bytes()).hexdigest() == cert_hash)
+    secret_hash = hashlib.sha256(credential.read_bytes()).hexdigest()
     subprocess.run(["bash",str(here/"uninstall.sh"),"--yes"],env=env,check=True,stdout=subprocess.DEVNULL)
     check("default uninstall preserves data and credentials",credential.exists() and (root/"var/lib/opencode").exists())
     check("uninstall removes binaries and units",not (root/"opt/opencode").exists() and not (root/"etc/systemd/system/opencode.service").exists())

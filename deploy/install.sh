@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 # Ubuntu/Debian systemd deployment; never changes octo or the main nginx service.
 set -euo pipefail
+install_source=${OPENCODE_DEPLOY_DIR:-$(dirname -- "${BASH_SOURCE[0]:-.}")}
+[[ -f "$install_source/common.sh" ]] || { printf 'Download the complete verified deploy bundle; set OPENCODE_DEPLOY_DIR to its deploy directory.\n' >&2; exit 1; }
 # shellcheck source=common.sh
-source "$(dirname -- "${BASH_SOURCE[0]}")/common.sh"
+source "$install_source/common.sh"
 host='' port=8558 backend_port=4096 workspace=/var/lib/opencode/workspace
 frontend='' frontend_sha='' backend='' replace_demo=0 no_firewall=0 dry_run=0
 while (($#)); do
@@ -63,6 +65,8 @@ finish() {
   fi
 }
 trap finish EXIT
+# Always collect explicit login input, before downloads or changes to the live login.
+python3 "$HERE/credentials.py" "$tmp/login.json"
 printf '%s  %s\n' "$frontend_sha" "$frontend" | sha256sum -c - >/dev/null
 if [[ -z "$backend" ]]; then
   backend="$tmp/$asset"
@@ -84,7 +88,7 @@ if [[ -d "$(path /opt/opencode/frontend)" ]]; then
   mv "$(path /opt/opencode/frontend)" "$(path /opt/opencode/backups)/frontend-$(date +%Y%m%d-%H%M%S)-$$"
 fi
 mv "$tmp/frontend" "$(path /opt/opencode/frontend)"
-python3 "$HERE/render.py" "$ROOT" "$host" "$port" "$backend_port" "$workspace"
+python3 "$HERE/render.py" "$ROOT" "$host" "$port" "$backend_port" "$workspace" "$tmp/login.json"
 if [[ -n "$ROOT" ]]; then
   mkdir -p "$(path /var/lib/opencode/workspace)"
   printf 'Staged files only under %s; no users, services or firewall modified.\n' "$ROOT"
@@ -138,4 +142,4 @@ fi
 systemctl restart opencode-web.service
 python3 "$HERE/verify.py" --port "$port"
 demo_stopped=0
-printf 'Ready: https://%s:%s/ ; login username opencode. Password: /etc/opencode/server.env (root-only); Go key: /etc/opencode/provider.env. No generation performed.\n' "$host" "$port"
+printf 'Ready: https://%s:%s/ ; Login credentials: /etc/opencode/server.env (root-only); Go key: /etc/opencode/provider.env. No generation performed.\n' "$host" "$port"

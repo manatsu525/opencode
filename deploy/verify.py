@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Read-only health/auth/HTML/SSE checks. No model calls; no credentials printed."""
 import argparse, base64, json, pathlib, ssl, time, urllib.error, urllib.request
+from credentials import read_env
 parser=argparse.ArgumentParser();parser.add_argument("--internal",action="store_true");parser.add_argument("--port",type=int,required=True);args=parser.parse_args()
-values=dict(line.split("=",1) for line in pathlib.Path("/etc/opencode/server.env").read_text().splitlines() if "=" in line and not line.startswith("#"))
+values=read_env("/etc/opencode/server.env")
 token=base64.b64encode((values["OPENCODE_SERVER_USERNAME"]+":"+values["OPENCODE_SERVER_PASSWORD"]).encode()).decode()
 origin=("http" if args.internal else "https")+"://127.0.0.1:"+str(args.port)
 context=ssl._create_unverified_context() if not args.internal else None

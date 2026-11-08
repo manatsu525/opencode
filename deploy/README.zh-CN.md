@@ -7,8 +7,8 @@
 - 完整安装面向 **Ubuntu/Debian + systemd**，ARM64、AMD64。自动识别架构；AMD64 默认选 baseline，避免 AVX2 假设。`OPENCODE_X64_VARIANT=standard` 可显式选择优化版。资产选择器也识别 musl，但完整安装器不支持 Alpine/OpenRC，不能将“能选 musl 资产”误认为支持所有发行版。
 - `deploy/official-v1.19.5.sha256` 固定 GitHub 官方不可变发布资产的 SHA256 digest；本地提供的后端压缩包也必须匹配。前端压缩包必须显式给出可信 SHA256。
 - 独立 `opencode`、`opencode-web` 系统用户；独立 nginx 进程/配置/PID/日志。**不修改主 nginx、octo、其配置、证书私钥或工作目录**。
-- 后端仅监听 `127.0.0.1:4096`，由 HTTPS `:8558` 代理。所有前端和 API 请求要求 HTTP Basic 登录，后端本身也启用同一密码。用户名 `opencode`。
-- 初次安装生成独立随机密码、自签名 IP/DNS 证书；重装保留密码、证书、provider.env、已有配置和数据。不把秘密写入前端、命令行参数或输出。
+- 后端仅监听 `127.0.0.1:4096`，由 HTTPS `:8558` 代理。所有前端和 API 请求要求 HTTP Basic 登录，后端本身也启用同一用户名/密码。官方 v1.19.5 支持 `OPENCODE_SERVER_USERNAME`，无需修改后端。
+- **每次真正安装/重装都重新询问登录用户名/密码**；初次安装生成独立自签名 IP/DNS 证书，重装保留证书、provider.env、已有配置和数据。不把秘密写入前端、命令行参数或输出。
 - 服务默认工作区 `/var/lib/opencode/workspace`，不复用 octo 的 `/home/octo/workspace`。`ProtectHome=true` 防止读取其他用户的 home。自定义工作区请用 `/srv/...` 等非 home 路径；外部目录必须预先存在并授权，新安装器不会擅自 chown 其他应用的目录。
 - `autoupdate:false` 和 `OPENCODE_DISABLE_AUTOUPDATE=1` 禁止自动升级。默认仅启用 `opencode-go`，不自动选择或虚构模型。
 - 安装/验证只做版本、健康、目录、模型目录等非生成性检查，不发聊天请求、不消耗模型推理。
@@ -52,7 +52,7 @@ gh release download v1.19.5 --repo anomalyco/opencode   --pattern opencode-linux
 sudo bash deploy/install.sh ... --backend-archive /path/to/opencode-linux-arm64.tar.gz
 ```
 
-`--port`、`--backend-port` 可改非特权端口；拒绝占用 octo 使用的 8557/8088/8090。`--workspace` 可改为预先授权的目录。`--dry-run` 只显示计划。`DESTDIR=/tmp/test-root` 仅生成/测试安装文件，不修改真实用户、systemd 或防火墙，绝不是生产安装。
+`--port`、`--backend-port` 可改非特权端口；拒绝占用 octo 使用的 8557/8088/8090。`--workspace` 可改为预先授权的目录。`--dry-run` 只显示计划，不收集密码、不更改安装。`DESTDIR=/tmp/test-root` 仅生成/测试安装文件，不修改真实用户、systemd 或防火墙，绝不是生产安装。
 
 默认检查/复用已有 `opencode-ui-demo` 或 `opencode-web` 注释的同端口 iptables 规则，否则只添加一条带 `opencode-web` 注释的 TCP ACCEPT，并记录所有权。仅当 netfilter-persistent 正在使用时保存。`--no-firewall` 跳过；UFW、其他防火墙和 OCI 云安全列表仍由管理员确认。安装器不调用 OCI API。
 
@@ -66,10 +66,22 @@ sudo openssl x509 -in /etc/opencode/tls/cert.pem -noout -fingerprint -sha256
 
 ## 密码与 OpenCode Go
 
-- 登录用户名：`opencode`。
-- 随机登录密码文件：`/etc/opencode/server.env`，root:root 0600。只通过受信 SSH/本机安全查看，勿粘贴到聊天或日志。不要把 API key 放在这个文件里。
+- 每次安装/重装都从 **`/dev/tty`** 询问用户名（回车默认 `admin`）、隐藏输入密码及再次确认。密码不能为空或全空白，确认不一致会重新询问；**不提供空密码沿用旧值**，避免误沿用旧登录。普通运行即使已安装也仍会询问。用户名限 1–64 位 ASCII 字母/数字或 `_ . @ -`，不能含 Basic auth 分隔符冒号；密码允许空格、引号、反斜杠、`$` 等可打印字符，但不能含换行/控制字符。env 文件采用兼容 Ubuntu 20.04 systemd 的字面转义，程序读取时会还原，勿把文件里的转义符误当成密码。
+- 无 TTY 时必须同时提供非空 `OPENCODE_WEB_USER`、`OPENCODE_WEB_PASSWORD`，否则在下载/改动登录前明确失败。两个变量一起提供时是显式自动化模式，不询问；只提供一个或空值也会失败。不要把密码明文写进命令参数、脚本仓库或 shell 历史。可通过 CI 的秘密环境变量注入，交互式提前设置时可用：
+
+```sh
+export OPENCODE_WEB_USER=admin
+IFS= read -r -s -p "Installation login password: " OPENCODE_WEB_PASSWORD < /dev/tty
+printf '\n'
+export OPENCODE_WEB_PASSWORD
+sudo --preserve-env=OPENCODE_WEB_USER,OPENCODE_WEB_PASSWORD bash deploy/install.sh ...
+unset OPENCODE_WEB_USER OPENCODE_WEB_PASSWORD
+```
+
+- 提问不会读取安装脚本的 stdin，支持管道运行。**安装器依赖同目录的 common.sh/Python 等配套文件，并非单文件引导器**；先下载并校验完整部署包，管道运行时用 `OPENCODE_DEPLOY_DIR` 指定该目录，例如 `curl -fsS file:///absolute/path/deploy/install.sh | sudo OPENCODE_DEPLOY_DIR=/absolute/path/deploy bash -s -- ...`。首次/再次管道安装都有 PTY 回归测试。
+- 登录配置文件：`/etc/opencode/server.env`，root:root 0600。只通过受信 SSH/本机安全查看，勿粘贴到聊天或日志。不要把 API key 放在这个文件里。
 - Go 提供方 ID：`opencode-go`，官方目录 URL 为 `https://opencode.ai/zen/go/v1`；其环境变量为 **OPENCODE_API_KEY**。
-- 目前没有用户 key，安装器不发明、不复用别的 key。填写 root-only 文件：
+- 安装器不会发明、覆盖或复用其他应用的 key；**已有 provider.env 原样保留**。新安装自行填写 root-only 文件：
 
 ```sh
 sudoedit /etc/opencode/provider.env
@@ -119,7 +131,9 @@ sudo bash deploy/uninstall.sh --yes --purge --restore-demo
 ```sh
 (cd deploy && shellcheck -x install.sh uninstall.sh common.sh)
 bash -n deploy/{common,install,uninstall}.sh
+python3 deploy/test_credentials.py --frontend /path/to/frontend.tar.gz --backend /path/to/opencode-linux-x64-baseline.tar.gz
+# 已安装 ARM/systemd 主机可加 --systemd 检查真实 EnvironmentFile 特殊字符/Unicode/末尾反斜杠解析（sudo 运行，后端和 octo 不重启）
 python3 deploy/test_deploy.py --frontend /path/to/frontend.tar.gz   --backend /path/to/opencode-linux-x64-baseline.tar.gz --report /tmp/opencode-test.json
 ```
 
-测试只在临时 DESTDIR 中验证安装、重装、密码/证书不变、备份、卸载/清空、架构选择和路径穿越拦截；AMD64 还实际启动官方 serve 二进制，验证带认证 health 和未认证 401，不发生成请求。它不是“完整 x86 systemd 安装测试”；生产 ARM64 VM 上另做真实 systemd/HTTPS/SSE 验证。
+测试包含 PTY 隐藏输入、默认用户名、空密码/确认错误、无 TTY 明确失败、显式环境变量与特殊字符、真正的 `curl | bash` 首装/重装提问。另在临时 DESTDIR 中验证安装、重装、显式同凭据幂等、凭据更换且 provider/证书不变、备份、卸载/清空、架构选择和路径穿越拦截；AMD64 还实际启动官方 serve 二进制，验证带认证 health 和未认证 401，不发生成请求。它不是“完整 x86 systemd 安装测试”；生产 ARM64 VM 上另做真实 systemd/HTTPS/SSE 验证。
