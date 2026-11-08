@@ -22,6 +22,8 @@ class AuthTests(unittest.TestCase):
         status,headers,body=self.request('/login');self.assertEqual(status,200);self.assertIn(b'autocomplete="current-password"',body);self.assertNotIn(self.password.encode(),body);self.assertEqual(headers['Cache-Control'],'no-store')
     def test_login_head(self):
         status,headers,body=self.request("/login","HEAD");self.assertEqual(status,200);self.assertEqual(body,b"");self.assertGreater(int(headers["Content-Length"]),0)
+    def test_proxy_login_does_not_redirect_to_itself(self):
+        _,_,body=self.request("/login",headers={"X-Original-URI":"/login"});self.assertIn(b'name="next" value="/"',body)
     def test_api_no_basic_challenge(self):
         status,headers,_=self.request();self.assertEqual(status,401);self.assertNotIn('WWW-Authenticate',headers)
     def test_correct_basic(self):
@@ -47,7 +49,7 @@ class AuthTests(unittest.TestCase):
     def test_cross_origin_websocket_denied(self):self.assertEqual(self.request(headers={'Cookie':self.token(),'X-Original-Origin':'https://test.example:8557'})[0],403)
     def test_same_origin_websocket_allowed(self):self.assertEqual(self.request(headers={'Cookie':self.token(),'X-Original-Origin':'https://test.example:8558'})[0],200)
     def test_redirect_safety(self):
-        for value in ('https://evil.example/','//evil.example/','/\\evil.example/','/\r\ninvalid'):
+        for value in ('https://evil.example/','//evil.example/','/\\evil.example/','/\r\ninvalid','/%2fevil.example/','/login','/logout'):
             self.assertEqual(self.login(next=value)[1]['Location'],'/')
         self.assertEqual(self.login(next='/project/session')[1]['Location'],'/project/session')
     def test_logout(self):

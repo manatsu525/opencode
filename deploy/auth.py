@@ -41,7 +41,8 @@ def make_server(address, username, password, origin, folder):
     def cookie(token,age=MAX_AGE):
         return COOKIE+'='+token+'; Path=/; Max-Age='+str(age)+'; Secure; HttpOnly; SameSite=Lax'
     def safe_next(value):
-        return value if value.startswith('/') and not value.startswith('//') and '\\' not in value and not any(ord(c)<32 for c in value) else '/'
+        decoded=urllib.parse.unquote(value)
+        return value if value.startswith('/') and not decoded.startswith('//') and '\\' not in decoded and not any(ord(c)<32 for c in decoded) and urllib.parse.urlsplit(decoded).path not in ('/login','/logout') else '/'
     class Handler(http.server.BaseHTTPRequestHandler):
         def log_message(self,*args):pass
         def reply(self,status,body=b'',headers=None):
