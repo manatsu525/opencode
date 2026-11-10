@@ -1132,7 +1132,7 @@ export const dict = {
 
   "session.delete.failed.title": "Failed to delete session",
   "session.delete.title": "Delete session",
-  "session.delete.confirm": 'Delete session "{{name}}"?',
+  "session.delete.confirm": 'Delete session "{{name}}"? This removes the conversation only; workspace files are kept. This cannot be undone.',
   "session.delete.button": "Delete session",
 
   "workspace.new": "New worktree",

@@ -563,7 +563,7 @@ export const dict = {
 
   "session.delete.failed.title": "删除会话失败",
   "session.delete.title": "删除会话",
-  "session.delete.confirm": '删除会话 "{{name}}"？',
+  "session.delete.confirm": '删除会话 "{{name}}"？此操作只删除对话记录，不会删除工作区文件，且无法撤销。',
   "session.delete.button": "删除会话",
 
   "workspace.new": "新建工作区",

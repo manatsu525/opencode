@@ -681,7 +681,7 @@ function HomeSessionRow(
             transition-[background-color,color,box-shadow] duration-[120ms] ease-in-out
             hover:bg-v2-overlay-simple-overlay-hover focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none
           `}
-          classList={{ "gap-1.5": props.desktop, "gap-2": !props.desktop, "md:pe-10": SHOW_HOME_SESSION_ARCHIVE }}
+          classList={{ "gap-1.5": props.desktop, "gap-2": !props.desktop, "pe-10": true }}
           onMouseDown={(event) => {
             if (event.button === 1) event.preventDefault()
           }}
@@ -766,6 +766,24 @@ function HomeSessionRow(
               desktop={props.desktop}
             />
           </div>
+        </button>
+      </Show>
+      <Show when={!editor()}>
+        {/* Visible entry to the row menu (rename, export, delete), so touch users need not discover long-press. */}
+        <button
+          type="button"
+          data-action="home-session-more"
+          aria-label={props.language.t("common.moreOptions")}
+          aria-haspopup="menu"
+          class="absolute end-1 top-1 grid size-8 place-items-center rounded-[6px] text-v2-text-text-faint hover:bg-v2-overlay-simple-overlay-hover focus-visible:opacity-100 md:opacity-0 md:group-hover/session:opacity-100 md:group-focus-within/session:opacity-100"
+          classList={{ "md:opacity-100": !!menu() }}
+          onClick={(event) => {
+            event.stopPropagation()
+            const bounds = event.currentTarget.getBoundingClientRect()
+            openMenu(event.currentTarget.parentElement ?? event.currentTarget, bounds.right - 8, bounds.bottom)
+          }}
+        >
+          <Icon name="outline-dots" />
         </button>
       </Show>
       <Menu
