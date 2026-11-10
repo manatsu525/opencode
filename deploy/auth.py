@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Local cookie gate. Opaque one-year sessions; never log credentials or tokens."""
 import base64, hashlib, hmac, html, http.cookies, http.server, json, os, pathlib, secrets, tempfile, threading, time, urllib.parse
+import workspace_files
 
 MAX_AGE = 31536000
 COOKIE = '__Host-opencode_session'
@@ -35,7 +36,7 @@ class Sessions:
         with self.lock:
             self.tokens.pop(hashlib.sha256(token.encode()).hexdigest(),None);self.save()
 
-def make_server(address, username, password, origin, folder):
+def make_server(address, username, password, origin, folder, workspace=None):
     sessions=Sessions(folder,username,password)
     backend='Basic '+base64.b64encode((username+':'+password).encode()).decode()
     def cookie(token,age=MAX_AGE):
@@ -58,8 +59,33 @@ def make_server(address, username, password, origin, folder):
         def same_origin(self):
             supplied=self.headers.get('X-Original-Origin') or self.headers.get('Origin')
             return not supplied or hmac.compare_digest(supplied,origin)
+        def authorized(self):
+            if sessions.valid(self.token()):return True
+            supplied=self.headers.get('Authorization','')
+            return bool(supplied) and hmac.compare_digest(supplied.encode(),backend.encode())
+        def files(self,path):
+            # nginx already ran auth_request; check again so the sidecar is never an open file server.
+            if not self.authorized():self.reply(401,b'login required',{'Content-Type':'text/plain; charset=utf-8'});return
+            if not workspace:self.reply(404);return
+            query=urllib.parse.parse_qs(path.query,keep_blank_values=True).get('path',[''])
+            try:
+                if path.path=='/files/list':
+                    body=json.dumps(workspace_files.list_directory(workspace,query[0]),ensure_ascii=False).encode()
+                    self.reply(200,body,{'Content-Type':'application/json; charset=utf-8','X-Content-Type-Options':'nosniff'});return
+                if path.path!='/files/download':self.reply(404);return
+                file,size,name=workspace_files.open_file(workspace,query[0])
+            except workspace_files.Refused as error:
+                self.reply(error.status,error.reason.encode(),{'Content-Type':'text/plain; charset=utf-8','X-Content-Type-Options':'nosniff'});return
+            try:
+                self.send_response(200)
+                for key,value in workspace_files.download_headers(name,size).items():self.send_header(key,value)
+                self.end_headers()
+                if self.command!='HEAD':workspace_files.stream(file,size,self.wfile)
+            except OSError:self.close_connection=True
+            finally:os.close(file)
         def do_GET(self):
             path=urllib.parse.urlsplit(self.path)
+            if path.path.startswith('/files/'):self.files(path);return
             if path.path=='/auth':
                 if not self.same_origin():self.reply(403);return
                 if sessions.valid(self.token()):self.reply(200,headers={'X-Opencode-Authorization':backend});return
@@ -97,4 +123,4 @@ def make_server(address, username, password, origin, folder):
     return LoginServer(address,Handler)
 
 if __name__=='__main__':
-    make_server(('127.0.0.1',int(os.environ.get('OPENCODE_AUTH_PORT','4097'))),os.environ['OPENCODE_SERVER_USERNAME'],os.environ['OPENCODE_SERVER_PASSWORD'],os.environ['OPENCODE_PUBLIC_ORIGIN'],os.environ.get('OPENCODE_AUTH_STATE','/var/lib/opencode-auth')).serve_forever()
+    make_server(('127.0.0.1',int(os.environ.get('OPENCODE_AUTH_PORT','4097'))),os.environ['OPENCODE_SERVER_USERNAME'],os.environ['OPENCODE_SERVER_PASSWORD'],os.environ['OPENCODE_PUBLIC_ORIGIN'],os.environ.get('OPENCODE_AUTH_STATE','/var/lib/opencode-auth'),os.environ.get('OPENCODE_WORKSPACE')).serve_forever()

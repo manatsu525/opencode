@@ -50,9 +50,11 @@ describe("safe inline images", () => {
     document.querySelector<HTMLButtonElement>('button[aria-label="Close"]')!.click()
     expect(root.querySelector("img")).toBe(img)
   })
-  test("tool FilePart attachments, Markdown images and plain image URLs are supported", () => {
-    const part = { type: "tool", state: { status: "completed", output: "![remote](https://example.com/no-extension?id=1) https://example.com/photo.jpg", attachments: [{ type: "file", mime: "image/png", url: "data:image/png;base64,AAAA" }, { type: "file", mime: "text/plain", url: "file:///secret.txt" }] } } as ToolPart
-    expect(toolImages(part).map((x) => x.url)).toEqual(["data:image/png;base64,AAAA", "https://example.com/no-extension?id=1", "https://example.com/photo.jpg"])
+  test("tool FilePart attachments render; image_search output Markdown images and image URLs render", () => {
+    const part = { type: "tool", tool: "image_search_search_images", state: { status: "completed", output: "![remote](https://example.com/no-extension?id=1) https://example.com/photo.jpg", attachments: [{ type: "file", mime: "text/plain", url: "file:///secret.txt" }] } } as ToolPart
+    expect(toolImages(part).map((x) => x.url)).toEqual(["https://example.com/no-extension?id=1", "https://example.com/photo.jpg"])
+    const attached = { type: "tool", tool: "bash", state: { status: "completed", output: "", attachments: [{ type: "file", mime: "image/png", url: "data:image/png;base64,AAAA" }] } } as ToolPart
+    expect(toolImages(attached).map((x) => x.url)).toEqual(["data:image/png;base64,AAAA"])
     expect(toolImages({ ...part, state: { status: "running" } } as ToolPart)).toEqual([])
   })
 })
@@ -60,6 +62,16 @@ describe("safe inline images", () => {
 test("image-search MCP attachments take precedence over duplicate output URLs", () => {
  const part = { tool: "image_search_search_images", state: { status: "completed", output: "![dog](https://example.com/a.jpg)", attachments: [{ mime: "image/jpeg", url: "data:image/jpeg;base64,AAAA" }] } } as ToolPart
  expect(toolImages(part).map((image) => image.url)).toEqual(["data:image/jpeg;base64,AAAA"])
+})
+
+test("bash/webfetch output never auto-renders images (lain.la error page regression)", () => {
+  const errorPage = '=== https://pomf2.lain.la/upload.php\n<!DOCTYPE html>\n<html><body><h1>If you are seeing this message, Lain.la\'s log cabin datacenter is having a few issues.</h1>\n<img src="https://lain.la/sadlain.PNG" width="400" height="600"></body></html>\n![x](https://example.com/x.png) https://example.com/y.jpg'
+  for (const tool of ["bash", "webfetch", "websearch", "keenable_search_search", "read", undefined]) {
+    const part = { type: "tool", tool, state: { status: "completed", output: errorPage, attachments: [] } } as unknown as ToolPart
+    expect(toolImages(part)).toEqual([])
+  }
+  const fake = { type: "tool", tool: "my_image_search_lookalike", state: { status: "completed", output: errorPage } } as unknown as ToolPart
+  expect(toolImages(fake)).toEqual([])
 })
 
 describe("mobile page zoom", () => {

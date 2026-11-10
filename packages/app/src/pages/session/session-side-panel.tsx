@@ -29,6 +29,7 @@ import { ConstrainDragYAxis, getDraggableId } from "@/utils/solid-dnd"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 
 import FileTree from "@/components/file-tree"
+import { WorkspaceFiles } from "@/components/workspace-files"
 import { normalizeFileTreeV2Path } from "@/components/file-tree-v2-model"
 import { SessionContextUsage } from "@/components/session-context-usage"
 
@@ -191,7 +192,7 @@ export function SessionSidePanel(props: {
   const fileTreeTab = () => layout.fileTree.tab()
 
   const setFileTreeTabValue = (value: string) => {
-    if (value !== "changes" && value !== "all") return
+    if (value !== "changes" && value !== "all" && value !== "workspace") return
     layout.fileTree.setTab(value)
   }
 
@@ -796,6 +797,9 @@ export function SessionSidePanel(props: {
                       <Tabs.Trigger value="all" class="flex-1" classes={{ button: "w-full" }}>
                         {language.t("session.files.all")}
                       </Tabs.Trigger>
+                      <Tabs.Trigger value="workspace" class="flex-1" classes={{ button: "w-full" }}>
+                        {language.t("workspace.files.title")}
+                      </Tabs.Trigger>
                     </Tabs.List>
                     <Show when={fileTreeTab() === "changes"}>
                       <Tabs.Content value="changes" class="bg-background-stronger px-3 py-0">
@@ -838,6 +842,11 @@ export function SessionSidePanel(props: {
                             />
                           </Match>
                         </Switch>
+                      </Tabs.Content>
+                    </Show>
+                    <Show when={fileTreeTab() === "workspace"}>
+                      <Tabs.Content value="workspace" class="bg-background-stronger p-0 h-full min-h-0">
+                        <WorkspaceFiles />
                       </Tabs.Content>
                     </Show>
                   </Tabs>

@@ -4,6 +4,7 @@ import json, pathlib, subprocess, sys
 from credentials import atomic_write, read_env, validate, write_env
 from tls import ensure_certificate
 from image_config import install as install_image_search
+from delivery_config import install as install_delivery_rule
 VERSION = "1.19.5"
 root, host, port, backend_port, workspace, login_file, cert_days, auth_port = sys.argv[1:]
 def p(name): return pathlib.Path(root + name)
@@ -27,10 +28,15 @@ if not p("/etc/opencode/provider.env").exists():
     write("/etc/opencode/provider.env", "# Add your real OpenCode Go key here, then restart opencode.\n# OPENCODE_API_KEY=\n", 0o600)
 config_file = p("/etc/opencode/opencode.json")
 config_mode = config_file.stat().st_mode & 0o777 if config_file.exists() else 0o644
-config = json.loads(config_file.read_text()) if config_file.exists() else {"$schema":"https://opencode.ai/config.json", "autoupdate":False, "enabled_providers":["opencode-go"]}
+config = json.loads(config_file.read_text()) if config_file.exists() else {"$schema":"https://opencode.ai/config.json", "autoupdate":False}
+# Older releases wrote an opencode-go-only whitelist, which silently hid every provider the user
+# adds in the UI (custom OpenAI-compatible endpoints included). Drop only that exact value.
+if config.get("enabled_providers") == ["opencode-go"]:
+    del config["enabled_providers"]
 config["permission"] = {key: "allow" for key in ("*", "read", "edit", "glob", "grep", "list", "bash", "task", "external_directory", "todowrite", "question", "webfetch", "websearch", "lsp", "doom_loop", "skill")}
 write("/etc/opencode/opencode.json", json.dumps(config, indent=2)+"\n", config_mode)
 install_image_search(root,host,port)
+install_delivery_rule(root, workspace)
 ensure_certificate(p("/etc/opencode/tls"), p("/opt/opencode/backups"), host, int(cert_days))
 backend = f"""[Unit]
 Description=Official OpenCode {VERSION} backend
@@ -91,7 +97,7 @@ TasksMax=32
 WantedBy=multi-user.target
 """)
 write("/etc/systemd/system/opencode-auth.service", f"""[Unit]
-Description=OpenCode one-year cookie login gate
+Description=OpenCode one-year cookie login gate and read-only workspace downloads
 After=network.target
 
 [Service]
@@ -99,16 +105,32 @@ Type=simple
 User=opencode-auth
 Group=opencode-auth
 EnvironmentFile=/etc/opencode/server.env
-Environment=OPENCODE_PUBLIC_ORIGIN=https://{host}:{port} OPENCODE_AUTH_PORT={auth_port} OPENCODE_AUTH_STATE=/var/lib/opencode-auth
+Environment=OPENCODE_PUBLIC_ORIGIN=https://{host}:{port} OPENCODE_AUTH_PORT={auth_port} OPENCODE_AUTH_STATE=/var/lib/opencode-auth OPENCODE_WORKSPACE={workspace}
 ExecStart=/usr/bin/python3 /opt/opencode/deploy/auth.py
 Restart=on-failure
 RestartSec=2
 UMask=0077
+# The root backend writes workspace files as root 0600, so read-only download needs
+# CAP_DAC_READ_SEARCH (read/traverse only; no write, chown or other capability).
+# Its reach is cut to the workspace by the mount namespace below: /var and every home
+# directory are replaced by empty tmpfs, then only the workspace (read-only) and the
+# sidecar's own state are bound back; credentials, keys and shadow files are inaccessible.
+CapabilityBoundingSet=CAP_DAC_READ_SEARCH
+AmbientCapabilities=CAP_DAC_READ_SEARCH
 NoNewPrivileges=true
 PrivateTmp=true
+PrivateDevices=true
 ProtectSystem=strict
-ProtectHome=true
-ReadWritePaths=/var/lib/opencode-auth
+ProtectHome=tmpfs
+TemporaryFileSystem=/var:ro
+BindPaths=/var/lib/opencode-auth
+BindReadOnlyPaths={workspace}
+InaccessiblePaths=-/etc/opencode -/etc/shadow -/etc/shadow- -/etc/gshadow -/etc/gshadow- -/etc/ssh -/etc/sudoers -/etc/sudoers.d -/etc/ssl/private -/etc/letsencrypt -/opt/opencode/backups -/opt/opencode/bin -/boot -/srv -/mnt -/media -/run/credentials
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+LockPersonality=true
 MemoryMax=96M
 TasksMax=64
 
@@ -198,6 +220,22 @@ LOGIN_HEADERS
    proxy_set_header X-Original-Origin $http_origin;
   }
   location = /image-preview { return 410; }
+  # Authenticated (server-level auth_request + sidecar re-check) read-only workspace browser.
+  location ~ ^/files/(list|download)$ {
+   proxy_pass http://127.0.0.1:AUTH;
+   proxy_http_version 1.1;
+   proxy_set_header Cookie $http_cookie;
+   proxy_set_header Authorization $http_authorization;
+   proxy_buffering off;
+   proxy_max_temp_file_size 0;
+   proxy_read_timeout 3600s;
+   proxy_send_timeout 3600s;
+   proxy_hide_header X-Content-Type-Options;
+   proxy_hide_header Cache-Control;
+   proxy_hide_header X-Frame-Options;
+   proxy_hide_header Referrer-Policy;
+  }
+  location /files/ { return 404; }
   location ~ ^/chat-images/([a-f0-9]+[.]jpg)$ {
    alias /var/lib/opencode-images/$1;
   }

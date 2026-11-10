@@ -2,6 +2,7 @@ import { checksum } from "@opencode-ai/core/util/encode"
 import DOMPurify from "dompurify"
 import { prepareImage } from "./inline-images"
 import { parseMarkdown } from "./markdown-worker"
+import { markWorkspaceDownload } from "./workspace-download-link"
 
 export type MarkdownCacheEntry = {
   raw: string
@@ -24,6 +25,7 @@ if (typeof window !== "undefined" && DOMPurify.isSupported) {
   DOMPurify.addHook("afterSanitizeAttributes", (node: Element) => {
     if (node instanceof HTMLImageElement) prepareImage(node)
     if (!(node instanceof HTMLAnchorElement)) return
+    if (markWorkspaceDownload(node)) return
     if (node.target !== "_blank") return
 
     const rel = node.getAttribute("rel") ?? ""

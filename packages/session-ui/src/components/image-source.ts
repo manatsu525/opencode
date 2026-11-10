@@ -23,13 +23,19 @@ export function toolImages(part: ToolPart): ReplyImage[] {
   for (const file of part.state.attachments ?? []) {
     if (file.mime.startsWith("image/")) add(file.url, file.filename || "Tool image")
   }
-  if (result.length && /image_search/.test(part.tool ?? "")) return result
-  // Structured FilePart attachments are authoritative. Also accept explicit Markdown
-  // images and plain image-file URLs from text-only search/plugin results.
+  // Only the image-search tool's own output may contribute extra inline images. Raw
+  // bash/webfetch/plugin output (error pages, logs, HTML) never auto-renders URLs it
+  // happens to contain: structured FilePart attachments above are authoritative.
+  if (!isImageSearchTool(part.tool) || result.length) return result
   const output = part.state.output.slice(0, 100000)
   marked.walkTokens(marked.lexer(output), (token) => {
     if (token.type === "image") add(token.href, token.text)
   })
   for (const match of output.matchAll(/https?:\/\/[^\s<>"'`]+\.(?:png|jpe?g|gif|webp|avif|bmp|svg)(?:[?#][^\s<>"'`]*)?/gi)) add(match[0].replace(/[),.;]+$/, ""))
   return result
+}
+
+/** The bundled image_search MCP registers tools as image_search_<tool>. */
+export function isImageSearchTool(tool: string | undefined) {
+  return /^image_search(?:_|$)/.test(tool ?? "")
 }

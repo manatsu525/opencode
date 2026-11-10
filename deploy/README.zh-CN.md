@@ -10,7 +10,7 @@
 - 后端仅监听 `127.0.0.1:4096`，由 HTTPS `:8558` 代理。HTML 显示移动端登录表单，成功签发 **一年**的 `__Host-opencode_session` Cookie（Secure/HttpOnly/SameSite=Lax/Path=/；服务端只保存随机令牌摘要及到期时间，不保存原始令牌或密码）。API 未登录 401；静态 assets、manifest、favicon 可公开读取。SSE/WebSocket 同样经过 Cookie gate，nginx 仅在服务端注入后端 Basic 头；后端仍启用同一用户名/密码。正确的 Basic 请求保留用于运维兼容；浏览器缓存的 Basic 在访问 HTML 后自动换 Cookie。官方 v1.19.5 支持 `OPENCODE_SERVER_USERNAME`，无需修改后端。
 - **每次真正安装/重装都重新询问登录用户名/密码**；初次安装生成独立 **3650 天（约十年）** 自签名 IP/DNS 证书；重装时证书剩余不足 3285 天（约九年）会先备份旧证书/私钥，再重发 3650 天证书，否则保留原证书。provider.env、已有数据和配置的其他字段保留（权限默认覆盖为 allow）。不把秘密写入前端、命令行参数或输出。
 - 服务默认工作区 `/var/lib/opencode/workspace`，不复用 octo 的 `/home/octo/workspace`。为保留已添加项目，root 后端仍使用 `HOME=/var/lib/opencode` 和原 XDG 路径，不迁移/重置数据库；没有 `ProtectHome` 限制。自定义工作区可以用现有目录；外部目录必须预先存在并授权，新安装器不会擅自 chown 其他应用的目录。
-- `autoupdate:false` 和 `OPENCODE_DISABLE_AUTOUPDATE=1` 禁止自动升级。默认仅启用 `opencode-go`，不自动选择或虚构模型。
+- `autoupdate:false` 和 `OPENCODE_DISABLE_AUTOUPDATE=1` 禁止自动升级。不再限制只显示 `opencode-go`：在界面里添加的服务商（含自定义 OpenAI 兼容端点，如 Vercel AI Gateway）都会出现；旧版本写入的 `enabled_providers: ["opencode-go"]` 白名单会在重装时自动删除（其他自定义的 enabled/disabled 设置保持不变）。不自动选择或虚构模型。
 - 安装/验证只做版本、健康、目录、模型目录等非生成性检查，不发聊天请求、不消耗模型推理。
 
 ## 准备前端发布包
@@ -149,6 +149,16 @@ curl -fsSL https://raw.githubusercontent.com/manatsu525/opencode/manatsu/v1.19.5
 - 旧参数 `--purge` 仍被接受（现在就是默认行为）；`--restore-demo` 会在卸载后启动旧演示服务（仅 start，不改启动策略）。
 - 不会删除：外部工作区、octo、主 nginx 服务、旧演示 `/opt/opencode-ui-demo`、预先存在的防火墙规则、apt 安装的共享软件包（nginx、python3-pil 等），以及 systemd journal 中的共享历史日志。
 
+## 工作区文件浏览与下载
+
+- 右侧面板可浏览**工作区全部文件**（`/var/lib/opencode/workspace`，含子目录、隐藏和 .gitignore 忽略的文件），不依赖 Git：手机端顶部标签“文件”，桌面端文件树面板的“工作区文件”标签。文件夹可逐级进入/返回，支持刷新，每个文件可单独下载。
+- 聊天中的同源链接 `/files/download?path=<相对工作区路径>`（如 `[下载 xiangqi.html](/files/download?path=xiangqi.html)`）点开直接下载，不跳转页面、不预览。全局规则 `/etc/opencode/DELIVERY.md` 要求智能体把成品放进工作区并给出这种链接，未经允许不得上传第三方网盘或另起服务。
+- 接口由现有登录 sidecar（opencode-auth）提供，经 nginx：`GET /files/list?path=`（JSON）与 `GET/HEAD /files/download?path=`（原样字节流式传输，无大小上限，不改动/不裁剪内容）。必须已登录（Cookie 或 Basic），否则 401；nginx 先做 auth_request，sidecar 自身再校验一次。
+- 路径安全：只接受相对工作区路径；拒绝绝对路径、`..`、反斜杠、控制字符。从工作区根目录 fd 起逐级 `openat(..., O_NOFOLLOW)`，任何一级是符号链接都拒绝（含下载过程中把目录替换成链接的竞态）；最终 `fstat` 只允许普通文件，FIFO/设备/套接字被拒（`O_NONBLOCK` 防阻塞）。列表中符号链接/特殊文件显示但不可下载；单目录最多列 5000 项；非 UTF-8 文件名不显示。
+- 响应头：`Content-Disposition: attachment`（ASCII 回退 + RFC 5987 `filename*` UTF-8）、`application/octet-stream`、`nosniff`、`no-store`、`CSP: sandbox`。
+- 权限说明：后端以 root 运行，生成文件常为 root 0600，组/ACL 无法覆盖显式 0600 的文件，因此 sidecar 只获授 **CAP_DAC_READ_SEARCH**（只读/遍历，不能写、改属主或其他特权）。其可见范围用 systemd 挂载命名空间收窄：`/var` 和所有家目录换成空 tmpfs，只把工作区（只读）和 sidecar 自身状态目录绑定回来；`/etc/opencode`（凭据、Go key、证书私钥）、shadow、ssh、sudoers、`/opt/opencode/backups` 等不可访问。代码本身也只从工作区 fd 打开文件。
+- 未实现：Range 断点续传、目录打包下载（可让智能体先打包 zip 再给链接）。
+
 ## 测试
 
 ```sh
@@ -156,6 +166,7 @@ curl -fsSL https://raw.githubusercontent.com/manatsu525/opencode/manatsu/v1.19.5
 bash -n deploy/{common,install,uninstall}.sh
 python3 deploy/test_auth.py
 python3 deploy/test_nginx_headers.py
+PYTHONPATH=deploy python3 -m unittest test_workspace_files   # 列表/下载/越界/符号链接/竞态/401
 python3 deploy/test_release.py --frontend /path/to/frontend.tar.gz --backend /path/to/opencode-linux-x64-baseline.tar.gz
 python3 deploy/test_credentials.py --frontend /path/to/frontend.tar.gz --backend /path/to/opencode-linux-x64-baseline.tar.gz
 # 已安装 ARM/systemd 主机可加 --systemd 检查真实 EnvironmentFile 特殊字符/Unicode/末尾反斜杠解析（sudo 运行，后端和 octo 不重启）
@@ -171,7 +182,7 @@ python3 deploy/test_deploy.py --frontend /path/to/frontend.tar.gz   --backend /p
 
 - 上下文圆环在窄屏可点击，弹出 token、上下文占比和费用，支持关闭；桌面保留官方行为。
 - 两代设置窗口在 768px 以下使用全屏、顶部横向滚动标签、堆叠的标签/控件以及明确关闭按钮。
-- 工具附件 FilePart、Markdown 图片、工具输出中的原图 URL 均复用安全的行内图片和缩放查看器。
+- 工具结果只有两类会显示为行内图片：结构化图片附件（FilePart），以及 image_search 工具自己的输出。bash、webfetch、websearch 等原始输出（报错网页、日志、HTML）里出现的图片网址一律不自动出图——此前 lain.la 报错页里的 `sadlain.PNG` 被误显示即属此类。助手正文中明确写出的 Markdown 图片仍正常显示。
 - 搜图按 octo 的实际方式实现：预装免 Key 的 **Bing Images MCP** + 全局“必须遵守”规则。自然图片请求由模型调用 `image_search_search_images`，不要求用户写特殊问法。不改官方后端二进制。
 - MCP 下载真实搜索结果原图，Pillow 校验并压缩为最长边 1280px、JPEG 质量 82，剥离原始元数据，返回 MCP image content（官方自动保存成 FilePart）及同源 Markdown URL；前端直接显示附件并可点开缩放。不会用文章 og:image 代替搜图。
 - `/chat-images/<sha256>.jpg` 使用原有 Cookie 登录保护；无 Key、无任意 URL 图片代理。网络仅标准 HTTP(S)，拒绝私网/本机/回环、DNS 固定 IP 并优先 IPv4、每跳重新校验，限制下载 12MiB、像素 2500万、缓存 1GiB。缓存满时拒绝新增；每日 opencode-image-cleanup.timer 清理下载超过 7 天的 JPEG 缓存，仅匹配本部署 SHA256 文件名，不跟随符号链接；失败如实返回，Bing 页面格式/站点可用性可能变化。

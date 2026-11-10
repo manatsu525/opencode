@@ -18,6 +18,15 @@ with tempfile.TemporaryDirectory(prefix="opencode-deploy-test-") as temp:
     config_path=root/"etc/opencode/opencode.json"
     check("keyless Keenable remote installed with OAuth disabled", json.loads(config_path.read_text())["mcp"]["keenable_search"]["oauth"] is False)
     check("installer/uninstaller retained",(root/"opt/opencode/deploy/uninstall.sh").is_file())
+    fresh=json.loads(config_path.read_text())
+    check("fresh install has no provider whitelist (UI-added providers visible)", "enabled_providers" not in fresh)
+    check("delivery rule installed and loaded", "/etc/opencode/DELIVERY.md" in fresh["instructions"] and "/files/download?path=" in (root/"etc/opencode/DELIVERY.md").read_text() and "/var/lib/opencode/workspace" in (root/"etc/opencode/DELIVERY.md").read_text())
+    auth_unit=(root/"etc/systemd/system/opencode-auth.service").read_text()
+    check("auth sidecar workspace-scoped read-only capability sandbox", all(x in auth_unit for x in ("OPENCODE_WORKSPACE=/var/lib/opencode/workspace","CapabilityBoundingSet=CAP_DAC_READ_SEARCH","AmbientCapabilities=CAP_DAC_READ_SEARCH","TemporaryFileSystem=/var:ro","BindReadOnlyPaths=/var/lib/opencode/workspace","BindPaths=/var/lib/opencode-auth","ProtectHome=tmpfs","-/etc/opencode","NoNewPrivileges=true")))
+    nginx_conf=(root/"etc/opencode/nginx.conf").read_text()
+    check("nginx streams authenticated /files routes via sidecar", "location ~ ^/files/(list|download)$" in nginx_conf and "proxy_buffering off" in nginx_conf.split("location ~ ^/files/")[1].split("}")[0] and "location /files/ { return 404; }" in nginx_conf)
+    check("deploy bundle ships workspace browser modules", (root/"opt/opencode/deploy/workspace_files.py").is_file() and (root/"opt/opencode/deploy/delivery_config.py").is_file())
+    legacy=json.loads(config_path.read_text());legacy["enabled_providers"]=["opencode-go"];legacy["disabled_providers"]=["kept"];config_path.write_text(json.dumps(legacy))
     short=root/"usr/local/bin/opencode-uninstall"
     check("standalone opencode-uninstall short command installed",short.is_file() and os.access(short,os.X_OK) and short.read_bytes()==(here/"uninstall.sh").read_bytes() and b"common.sh\"" not in short.read_bytes())
     credential=root/"etc/opencode/server.env";secret_hash=hashlib.sha256(credential.read_bytes()).hexdigest();cert_hash=hashlib.sha256((root/"etc/opencode/tls/cert.pem").read_bytes()).hexdigest()
@@ -69,12 +78,14 @@ with tempfile.TemporaryDirectory(prefix="opencode-deploy-test-") as temp:
     env.update(OPENCODE_WEB_USER="rotated-admin", OPENCODE_WEB_PASSWORD="rotated-test-only-password")
     install()
     check("reinstall rotates selected credentials", read_env(credential)["OPENCODE_SERVER_USERNAME"] == env["OPENCODE_WEB_USER"] and read_env(credential)["OPENCODE_SERVER_PASSWORD"] == env["OPENCODE_WEB_PASSWORD"])
+    migrated=json.loads(config_path.read_text())
+    check("reinstall drops legacy opencode-go-only whitelist but keeps other provider settings", "enabled_providers" not in migrated and migrated.get("disabled_providers")==["kept"] and migrated["instructions"].count("/etc/opencode/DELIVERY.md")==1)
     check("provider secret preserved when rotating login", provider.read_bytes() == before_provider and provider.stat().st_mode & 0o777 == 0o600)
     check("certificate preserved when rotating login", hashlib.sha256((root/"etc/opencode/tls/cert.pem").read_bytes()).hexdigest() == cert_hash)
     secret_hash = hashlib.sha256(credential.read_bytes()).hexdigest()
     subprocess.run(["bash",str(here/"uninstall.sh"),"--yes","--keep-data"],env=env,check=True,stdout=subprocess.DEVNULL)
     check("--keep-data uninstall preserves data and credentials",credential.exists() and (root/"var/lib/opencode").exists())
-    check("--keep-data uninstall retains remote MCP and global fallback rules", "keenable_search" in json.loads(config_path.read_text())["mcp"] and (root/"etc/opencode/IMAGE_SEARCH.md").exists())
+    check("--keep-data uninstall retains remote MCP and global fallback/delivery rules", "keenable_search" in json.loads(config_path.read_text())["mcp"] and (root/"etc/opencode/IMAGE_SEARCH.md").exists() and (root/"etc/opencode/DELIVERY.md").exists())
     check("uninstall removes binaries, units and short command",not (root/"opt/opencode").exists() and not (root/"etc/systemd/system/opencode.service").exists() and not short.exists())
     install()
     check("reinstall preserves password",hashlib.sha256(credential.read_bytes()).hexdigest()==secret_hash)
@@ -82,7 +93,7 @@ with tempfile.TemporaryDirectory(prefix="opencode-deploy-test-") as temp:
     # Default (no --keep-data) = complete removal, run through the installed short command.
     subprocess.run(["bash",str(short),"--yes"],env=env,check=True,stdout=subprocess.DEVNULL)
     check("default uninstall removes everything incl. itself",not short.exists() and not any((root/d).exists() for d in ("opt/opencode","etc/opencode","var/lib/opencode","var/lib/opencode-web","var/lib/opencode-auth","var/lib/opencode-images","var/cache/opencode")))
-    check("default uninstall removes Keenable config and fallback rules", not config_path.exists() and not (root/"etc/opencode/IMAGE_SEARCH.md").exists())
+    check("default uninstall removes Keenable config and fallback/delivery rules", not config_path.exists() and not (root/"etc/opencode/IMAGE_SEARCH.md").exists() and not (root/"etc/opencode/DELIVERY.md").exists())
     check("default uninstall removes app data/credentials",not (root/"etc/opencode").exists() and not (root/"var/lib/opencode").exists())
     bad=pathlib.Path(temp)/"bad.tar.gz"
     with tarfile.open(bad,"w:gz") as tf:
