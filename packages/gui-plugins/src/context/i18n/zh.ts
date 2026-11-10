@@ -1,8 +1,8 @@
 export default {
   "tab.title": "上下文",
   "mobile.title": "用法",
-  "usage.tokens": "词元数",
-  "usage.usage": "使用率",
+  "usage.tokens": "当前上下文",
+  "usage.usage": "上下文占用",
   "usage.cost": "成本",
   "usage.view": "查看上下文用量",
   "systemPrompt.title": "系统提示词",
@@ -13,7 +13,7 @@ export default {
   "stats.provider": "提供商",
   "stats.model": "模型",
   "stats.limit": "上下文限制",
-  "stats.totalTokens": "词元总数",
+  "stats.totalTokens": "当前上下文",
   "stats.usage": "使用率",
   "stats.inputTokens": "输入词元",
   "stats.outputTokens": "输出词元",
@@ -28,4 +28,8 @@ export default {
   "export.success.description": "已将会话保存到 {{filename}}",
   "export.failed.title": "导出会话失败",
   "export.failed.description": "导出会话时发生错误",
+  "usage.cacheHit": "缓存命中率",
+  "usage.cumulative": "累计总 Token",
+  "stats.cumulativeTokens": "累计总 Token",
+  "stats.cacheHitRate": "缓存命中率",
 }

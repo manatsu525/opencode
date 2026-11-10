@@ -1,7 +1,7 @@
 export default {
   "tab.title": "Context",
   "mobile.title": "Usage",
-  "usage.tokens": "Tokens",
+  "usage.tokens": "Current context",
   "usage.usage": "Context",
   "usage.cost": "Cost",
   "usage.view": "View context usage",
@@ -14,7 +14,7 @@ export default {
   "stats.provider": "Provider",
   "stats.model": "Model",
   "stats.limit": "Context Limit",
-  "stats.totalTokens": "Total Tokens",
+  "stats.totalTokens": "Current Context",
   "stats.usage": "Usage",
   "stats.inputTokens": "Input Tokens",
   "stats.outputTokens": "Output Tokens",
@@ -29,4 +29,8 @@ export default {
   "export.success.description": "Saved session to {{filename}}",
   "export.failed.title": "Failed to export session",
   "export.failed.description": "An error occurred while exporting the session",
+  "usage.cacheHit": "Cache hit rate",
+  "usage.cumulative": "Cumulative tokens",
+  "stats.cumulativeTokens": "Cumulative Tokens",
+  "stats.cacheHitRate": "Cache Hit Rate",
 }

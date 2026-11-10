@@ -6,6 +6,7 @@ import { useI18n } from "@opencode/ui/context/i18n"
 import { lastAssistantWithUsage } from "@opencode/client/solid"
 import { usePlugin, type MountedSession } from "@opencode/plugin/gui"
 import { catalogModel, syncCatalog } from "./catalog"
+import { cacheHitRate, cumulativeTokens } from "./session-totals"
 
 function ContextTooltipRow(props: { name: JSX.Element; value: JSX.Element }) {
   return (
@@ -30,14 +31,6 @@ export function SessionContextUsage(props: {
 
   const messages = createMemo(() =>
     props.session.id ? props.session.server.data.session.message.list(props.session.id) : [],
-  )
-
-  const usd = createMemo(
-    () =>
-      new Intl.NumberFormat(i18n.locale(), {
-        style: "currency",
-        currency: "USD",
-      }),
   )
 
   const info = createMemo(() =>
@@ -70,21 +63,9 @@ export function SessionContextUsage(props: {
       .toLocaleLowerCase(i18n.locale()),
   )
 
-  // A root session's cost includes its subagent sessions, as in the TUI.
-  const spent = createMemo(() => (props.session.id ? props.session.server.data.session.cost(props.session.id) : 0))
-
-  const cost = createMemo(() => usd().format(spent()))
-
-  // Spend anywhere in the family keeps the cost visible, even when this session's model is free.
-  const showCost = createMemo(() => {
-    if (spent() > 0) return true
-    const ref = info()?.model ?? messages().findLast((item) => item.type === "assistant")?.model
-    const model = ref ? catalogModel(props.session, ref)?.model : undefined
-
-    if (!model) return true
-
-    return model.cost.some((cost) => cost.input > 0 || cost.output > 0 || cost.cache.read > 0 || cost.cache.write > 0)
-  })
+  // Cost is hidden on this deployment; show cumulative tokens and the prompt-cache hit rate instead.
+  const cumulative = createMemo(() => cumulativeTokens(info()?.tokens))
+  const cacheHit = createMemo(() => cacheHitRate(info()?.tokens))
 
   const openContext = () => {
     if (!props.session.id) return
@@ -114,12 +95,17 @@ export function SessionContextUsage(props: {
   )
 
   const tooltipValue = () => (
-    <div class="flex w-[120px] flex-col gap-2">
-      <Show when={showCost()}>
-        <ContextTooltipRow name={ctx.t("usage.cost")} value={cost()} />
-      </Show>
+    <div class="flex w-[168px] flex-col gap-2">
       <ContextTooltipRow name={ctx.t("usage.usage")} value={`${context()?.usage ?? 0}%`} />
       <ContextTooltipRow name={ctx.t("usage.tokens")} value={context()?.total.toLocaleString(i18n.locale()) ?? "0"} />
+      <ContextTooltipRow
+        name={ctx.t("usage.cacheHit")}
+        value={cacheHit() === null || cacheHit() === undefined ? "—" : `${cacheHit()}%`}
+      />
+      <ContextTooltipRow
+        name={ctx.t("usage.cumulative")}
+        value={cumulative()?.toLocaleString(i18n.locale()) ?? "—"}
+      />
     </div>
   )
 
@@ -144,12 +130,6 @@ export function SessionContextUsage(props: {
               <span class="flex items-center gap-2 whitespace-nowrap group-active:text-v2-text-text-muted">
                 {compactCircle()}
                 <span>{tokens()}</span>
-                <Show when={showCost()}>
-                  <span aria-hidden="true" class="flex w-1.5 shrink-0 items-center justify-center">
-                    ·
-                  </span>
-                  <span>{cost()}</span>
-                </Show>
               </span>
             </Button>
           }
