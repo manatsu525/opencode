@@ -50,16 +50,11 @@ function ref(input: string) {
   return input
 }
 
-// OpenCode 2 releases share this repository, so only OpenCode 1 tags are candidates.
-export function latestV1(releases: Release[]) {
-  return releases.find((item) => !item.draft && /^v1\.\d+\.\d+$/.test(item.tag_name))?.tag_name.replace(/^v/, "")
-}
-
 async function latest() {
   const data = await $`gh api "/repos/${repo}/releases?per_page=100"`.json()
-  const release = latestV1(data as Release[])
-  if (!release) throw new Error("No OpenCode 1 releases found")
-  return release
+  const release = (data as Release[]).find((item) => !item.draft)
+  if (!release) throw new Error("No releases found")
+  return release.tag_name.replace(/^v/, "")
 }
 
 async function diff(base: string, head: string) {
@@ -125,7 +120,7 @@ async function commits(from: string, to: string) {
   }
 
   const log =
-    await $`git log ${base}..${head} --format=%H -- packages/opencode packages/sdk packages/plugin packages/desktop packages/app sdks/vscode packages/extensions github`.text()
+    await $`git log ${base}..${head} --format=%H -- packages/opencode packages/plugin packages/desktop packages/app sdks/vscode packages/extensions github`.text()
 
   const list: Commit[] = []
   for (const hash of log.split("\n").filter(Boolean)) {
@@ -141,7 +136,7 @@ async function commits(from: string, to: string) {
       else if (file.startsWith("packages/opencode/")) areas.add("core")
       else if (file.startsWith("packages/desktop/src-tauri/")) areas.add("tauri")
       else if (file.startsWith("packages/desktop/") || file.startsWith("packages/app/")) areas.add("app")
-      else if (file.startsWith("packages/sdk/") || file.startsWith("packages/plugin/")) areas.add("sdk")
+      else if (file.startsWith("packages/plugin/")) areas.add("sdk")
       else if (file.startsWith("sdks/vscode/") || file.startsWith("github/")) areas.add("extensions/vscode")
     }
 
