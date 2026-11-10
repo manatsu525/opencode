@@ -1,5 +1,5 @@
-import { expect, test } from "bun:test"
-import { localImagePath, localLinkPath } from "./markdown-image"
+import { describe, expect, test } from "bun:test"
+import { isServedRoute, localImagePath, localLinkPath } from "./markdown-image"
 
 test.each([
   ["./out/report.html", "./out/report.html"],
@@ -57,4 +57,19 @@ test.each([
   "",
 ])("does not read non-local or invalid source %s", (source) => {
   expect(localImagePath(source)).toBeUndefined()
+})
+
+describe("deployment routes stay web URLs", () => {
+  test("workspace download and chat image routes are not local files", () => {
+    expect(localLinkPath("/files/download?path=xiangqi.html")).toBeUndefined()
+    expect(localLinkPath("/files/download?path=docs/%E6%8A%A5%E5%91%8A.pdf")).toBeUndefined()
+    expect(localImagePath("/chat-images/0123abcd.jpg")).toBeUndefined()
+    expect(isServedRoute("/files/list?path=")).toBe(true)
+  })
+
+  test("other absolute paths are still local files", () => {
+    expect(localLinkPath("/var/lib/opencode/workspace/xiangqi.html")).toBe("/var/lib/opencode/workspace/xiangqi.html")
+    expect(localLinkPath("/files/other.txt")).toBe("/files/other.txt")
+    expect(localImagePath("/tmp/chart.png")).toBe("/tmp/chart.png")
+  })
 })

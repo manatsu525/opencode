@@ -2,7 +2,16 @@ import { abort } from "@opencode/util/abort"
 import { isLineRangeHash, parsePathLineSuffix } from "@opencode/util/path"
 import type { ReadMarkdownImage } from "../context/markdown"
 
+/**
+ * Same-origin routes this deployment serves over HTTP (workspace downloads, the chat image cache). They are web URLs,
+ * not files on disk, so links and images pointing at them keep their href/src.
+ */
+export function isServedRoute(source: string) {
+  return /^\/(?:files\/(?:download|list)(?:[?#]|$)|chat-images\/)/.test(source.trim())
+}
+
 export function localImagePath(source: string) {
+  if (isServedRoute(source)) return
   // Marked percent-encodes image sources, so `C:\tmp\chart.png` arrives as `C:%5Ctmp%5Cchart.png`.
   const value = source.trim().replace(/\\|%5c/gi, "/")
 
@@ -30,7 +39,7 @@ export function localImagePath(source: string) {
 export function localLinkPath(href: string) {
   const value = href.trim()
 
-  if (!value || value.startsWith("#") || value.startsWith("?")) return
+  if (!value || value.startsWith("#") || value.startsWith("?") || isServedRoute(value)) return
 
   const hashIndex = value.indexOf("#")
   const hash = hashIndex === -1 ? "" : value.slice(hashIndex)

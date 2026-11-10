@@ -316,6 +316,10 @@
     unicode-bidi: isolate;
   }
 
+  [data-component="markdown-mermaid"][role="button"] {
+    cursor: zoom-in;
+  }
+
   [data-component="markdown-mermaid"] > svg {
     display: block;
     max-width: 100%;
@@ -477,8 +481,13 @@
   /* Images */
   img {
     cursor: zoom-in;
-    max-width: 100%;
+    /* Keep chat images readable without filling the screen: cap both sides, keep the aspect ratio (width and
+       height stay auto, so a known intrinsic size reserves its box before load). The preview opens full size. */
+    max-width: min(100%, 640px);
+    max-height: min(60vh, 520px);
+    width: auto;
     height: auto;
+    object-fit: contain;
     border-radius: 4px;
     margin: 1.5rem 0;
     display: block;
