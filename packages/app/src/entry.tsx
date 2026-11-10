@@ -51,8 +51,19 @@ const clearAuthToken = () => {
 
 const web = createWebPlatform(pkg.version)
 
+// This deployment sits behind a cookie login gate. An offline service worker would answer navigations from its
+// precache (bypassing the gate's redirect to /login) and download the whole ~100 MB build on phones, so none is
+// registered and any left over from an earlier visit is removed.
 if (import.meta.env.PROD && "serviceWorker" in navigator) {
-  window.addEventListener("load", () => void navigator.serviceWorker.register("/sw.js"), { once: true })
+  window.addEventListener(
+    "load",
+    () =>
+      void navigator.serviceWorker
+        .getRegistrations()
+        .then((registrations) => Promise.all(registrations.map((registration) => registration.unregister())))
+        .catch(() => undefined),
+    { once: true },
+  )
 }
 
 if (import.meta.env.VITE_SENTRY_DSN) {
