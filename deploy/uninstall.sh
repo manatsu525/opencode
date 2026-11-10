@@ -1,8 +1,18 @@
 #!/usr/bin/env bash
 # Remove only this deployment; never remove octo, external workspaces or old demo backups.
 set -euo pipefail
-# shellcheck source=common.sh
-source "$(dirname -- "${BASH_SOURCE[0]}")/common.sh"
+# Works from /opt/opencode/deploy, a checkout, or piped: curl -fsSL .../deploy/uninstall.sh | sudo bash -s -- --yes [--purge]
+self=${BASH_SOURCE[0]:-}
+if [[ -n "$self" && -f "$(dirname -- "$self")/common.sh" ]]; then
+  # shellcheck source=common.sh
+  source "$(dirname -- "$self")/common.sh"
+else
+  ROOT=${DESTDIR:-}
+  [[ -z "$ROOT" || ( "$ROOT" == /* && "$ROOT" != / && "$ROOT" != *..* ) ]] || { printf "Invalid DESTDIR\n" >&2; exit 1; }
+  path() { printf '%s%s' "$ROOT" "$1"; }
+  fail() { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
+  validate_port() { [[ "$1" =~ ^[0-9]+$ ]] && (( 10#$1 >= 1024 && 10#$1 <= 65535 )); }
+fi
 yes=0 purge=0 restore_demo=0
 while (($#)); do
   case "$1" in --yes) yes=1 ;; --purge) purge=1 ;; --restore-demo) restore_demo=1 ;; *) fail "Unknown option: $1" ;; esac

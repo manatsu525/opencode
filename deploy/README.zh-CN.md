@@ -147,6 +147,12 @@ sudo bash deploy/uninstall.sh --yes
 sudo bash deploy/uninstall.sh --yes --purge --restore-demo
 ```
 
+默认卸载会删除 `/opt/opencode`（含其中的 uninstall.sh）。之后若还要彻底清除数据/凭据，可直接用仓库脚本：
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/manatsu525/opencode/manatsu/v1.19.5/deploy/uninstall.sh | sudo bash -s -- --yes --purge
+```
+
 `--purge` 会删除 `/var/lib/opencode` 内的会话和默认工作区，务必自行备份。不会删除外部工作区、octo、主 nginx、旧演示 `/opt/opencode-ui-demo`、复用的预存防火墙规则或其他共享 apt 包；只删除本安装器自己添加并记录的防火墙规则。旧演示原本未启用开机启动，恢复命令仅 start，不擅自改变其启动策略。
 
 ## 测试
