@@ -18,6 +18,8 @@ with tempfile.TemporaryDirectory(prefix="opencode-deploy-test-") as temp:
     config_path=root/"etc/opencode/opencode.json"
     check("keyless Keenable remote installed with OAuth disabled", json.loads(config_path.read_text())["mcp"]["keenable_search"]["oauth"] is False)
     check("installer/uninstaller retained",(root/"opt/opencode/deploy/uninstall.sh").is_file())
+    short=root/"usr/local/bin/opencode-uninstall"
+    check("standalone opencode-uninstall short command installed",short.is_file() and os.access(short,os.X_OK) and short.read_bytes()==(here/"uninstall.sh").read_bytes() and b"common.sh\"" not in short.read_bytes())
     credential=root/"etc/opencode/server.env";secret_hash=hashlib.sha256(credential.read_bytes()).hexdigest();cert_hash=hashlib.sha256((root/"etc/opencode/tls/cert.pem").read_bytes()).hexdigest()
     check("root-only credential mode",credential.stat().st_mode&0o777==0o600)
     check("web unit is unprivileged","User=opencode-web" in (root/"etc/systemd/system/opencode-web.service").read_text())
@@ -70,15 +72,18 @@ with tempfile.TemporaryDirectory(prefix="opencode-deploy-test-") as temp:
     check("provider secret preserved when rotating login", provider.read_bytes() == before_provider and provider.stat().st_mode & 0o777 == 0o600)
     check("certificate preserved when rotating login", hashlib.sha256((root/"etc/opencode/tls/cert.pem").read_bytes()).hexdigest() == cert_hash)
     secret_hash = hashlib.sha256(credential.read_bytes()).hexdigest()
-    subprocess.run(["bash",str(here/"uninstall.sh"),"--yes"],env=env,check=True,stdout=subprocess.DEVNULL)
-    check("default uninstall preserves data and credentials",credential.exists() and (root/"var/lib/opencode").exists())
-    check("default uninstall retains remote MCP and global fallback rules", "keenable_search" in json.loads(config_path.read_text())["mcp"] and (root/"etc/opencode/IMAGE_SEARCH.md").exists())
-    check("uninstall removes binaries and units",not (root/"opt/opencode").exists() and not (root/"etc/systemd/system/opencode.service").exists())
+    subprocess.run(["bash",str(here/"uninstall.sh"),"--yes","--keep-data"],env=env,check=True,stdout=subprocess.DEVNULL)
+    check("--keep-data uninstall preserves data and credentials",credential.exists() and (root/"var/lib/opencode").exists())
+    check("--keep-data uninstall retains remote MCP and global fallback rules", "keenable_search" in json.loads(config_path.read_text())["mcp"] and (root/"etc/opencode/IMAGE_SEARCH.md").exists())
+    check("uninstall removes binaries, units and short command",not (root/"opt/opencode").exists() and not (root/"etc/systemd/system/opencode.service").exists() and not short.exists())
     install()
     check("reinstall preserves password",hashlib.sha256(credential.read_bytes()).hexdigest()==secret_hash)
-    subprocess.run(["bash",str(here/"uninstall.sh"),"--yes","--purge"],env=env,check=True,stdout=subprocess.DEVNULL)
-    check("purge removes Keenable config and fallback rules", not config_path.exists() and not (root/"etc/opencode/IMAGE_SEARCH.md").exists())
-    check("purge removes app data/credentials",not (root/"etc/opencode").exists() and not (root/"var/lib/opencode").exists())
+    check("reinstall restores short command",short.is_file())
+    # Default (no --keep-data) = complete removal, run through the installed short command.
+    subprocess.run(["bash",str(short),"--yes"],env=env,check=True,stdout=subprocess.DEVNULL)
+    check("default uninstall removes everything incl. itself",not short.exists() and not any((root/d).exists() for d in ("opt/opencode","etc/opencode","var/lib/opencode","var/lib/opencode-web","var/lib/opencode-auth","var/lib/opencode-images","var/cache/opencode")))
+    check("default uninstall removes Keenable config and fallback rules", not config_path.exists() and not (root/"etc/opencode/IMAGE_SEARCH.md").exists())
+    check("default uninstall removes app data/credentials",not (root/"etc/opencode").exists() and not (root/"var/lib/opencode").exists())
     bad=pathlib.Path(temp)/"bad.tar.gz"
     with tarfile.open(bad,"w:gz") as tf:
         member=tarfile.TarInfo("../escaped");member.size=1;tf.addfile(member,io.BytesIO(b"x"))

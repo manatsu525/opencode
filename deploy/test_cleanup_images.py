@@ -12,7 +12,7 @@ class Tests(unittest.TestCase):
  def test_installer_and_uninstaller_wire_daily_timer(self):
   here=pathlib.Path(__file__).parent
   rendered=(here/'render.py').read_text();self.assertIn('OnCalendar=daily',rendered);self.assertIn('Persistent=true',rendered);self.assertIn('ReadWritePaths=/var/lib/opencode-images',rendered)
-  self.assertIn('enable --now opencode-image-cleanup.timer',(here/'install.sh').read_text());self.assertIn('disable --now opencode-image-cleanup.timer',(here/'uninstall.sh').read_text())
+  self.assertIn('enable --now opencode-image-cleanup.timer',(here/'install.sh').read_text());u=(here/'uninstall.sh').read_text();self.assertIn('units=(opencode-image-cleanup.timer opencode-image-cleanup.service',u);self.assertIn('systemctl disable --now "${units[@]}"',u)
  def test_store_symlink_rejected(self):
   with tempfile.TemporaryDirectory() as directory:
    root=pathlib.Path(directory);(root/'link').symlink_to(root,target_is_directory=True)

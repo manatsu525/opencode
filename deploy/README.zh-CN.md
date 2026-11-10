@@ -131,29 +131,23 @@ backend：MemoryHigh 768M / MemoryMax 1536M / CPUQuota 150%；web：MemoryMax 12
 
 HTTPS 首次启用会换浏览器 origin，演示的本地设置/假会话不会迁移；实际后端是空白新状态。Mermaid/图片功能仍在前端；外链图片推荐 HTTPS，防盗链/混合内容失败时显示来源链接。
 
-安装后脚本也保存在 `/opt/opencode/deploy/`；可以直接运行其中的 `uninstall.sh`，不依赖 `/tmp` 或仓库留在目标机。手动上传的 tar/脚本源目录不属于自动删除范围，确认不再使用后自行清理。
+安装器会放一个独立的短命令 `/usr/local/bin/opencode-uninstall`（与 `deploy/uninstall.sh` 相同，不依赖 `/opt/opencode` 中的其他文件）。手动上传的 tar/脚本源目录不属于自动删除范围，确认不再使用后自行清理。
 
-## 卸载与恢复旧演示
+## 卸载（默认彻底删除）
 
-默认保留真实数据、工作区和密码供重装：
-
-```sh
-sudo bash deploy/uninstall.sh --yes
-```
-
-永久删除本部署的数据、缓存、Cookie 会话和凭据，并恢复原演示监听：
+任选其一，二者等价：
 
 ```sh
-sudo bash deploy/uninstall.sh --yes --purge --restore-demo
+sudo opencode-uninstall
+curl -fsSL https://raw.githubusercontent.com/manatsu525/opencode/manatsu/v1.19.5/deploy/uninstall.sh | sudo bash
 ```
 
-默认卸载会删除 `/opt/opencode`（含其中的 uninstall.sh）。之后若还要彻底清除数据/凭据，可直接用仓库脚本：
+终端只问一次 `确定要彻底卸载 OpenCode 吗？… [Y/n]`，直接回车即确认，输入 n 取消（不删除任何东西）。确认后删除：全部 systemd 服务/定时器（opencode、opencode-web、opencode-auth、opencode-image-cleanup）、`/opt/opencode`（二进制、前端、部署脚本、备份）、`/etc/opencode`（登录凭据、Go key、自签证书、独立 nginx 配置、MCP 与全局规则）、`/var/lib/opencode`（会话和默认工作区）、`/var/cache/opencode`、`/var/lib/opencode-auth`（Cookie 登录）、`/var/lib/opencode-images`（下载的图片）、`/var/lib/opencode-web`（独立 nginx 运行目录和访问日志）、系统用户/组 opencode、opencode-web、opencode-auth、本安装器添加并记录的防火墙规则，最后删除 `opencode-uninstall` 自身。**不可恢复，务必先自行备份会话/工作区。**
 
-```sh
-curl -fsSL https://raw.githubusercontent.com/manatsu525/opencode/manatsu/v1.19.5/deploy/uninstall.sh | sudo bash -s -- --yes --purge
-```
-
-`--purge` 会删除 `/var/lib/opencode` 内的会话和默认工作区，务必自行备份。不会删除外部工作区、octo、主 nginx、旧演示 `/opt/opencode-ui-demo`、复用的预存防火墙规则或其他共享 apt 包；只删除本安装器自己添加并记录的防火墙规则。旧演示原本未启用开机启动，恢复命令仅 start，不擅自改变其启动策略。
+- 无交互终端（cron、CI、ssh 不带 -t）时脚本拒绝执行，需显式加 `--yes`：`curl -fsSL …/uninstall.sh | sudo bash -s -- --yes` 或 `sudo opencode-uninstall --yes`。
+- 只想移除程序、保留数据/凭据/证书/配置以便重装：`sudo opencode-uninstall --keep-data`。之后要彻底清除再运行上面的 curl 命令。
+- 旧参数 `--purge` 仍被接受（现在就是默认行为）；`--restore-demo` 会在卸载后启动旧演示服务（仅 start，不改启动策略）。
+- 不会删除：外部工作区、octo、主 nginx 服务、旧演示 `/opt/opencode-ui-demo`、预先存在的防火墙规则、apt 安装的共享软件包（nginx、python3-pil 等），以及 systemd journal 中的共享历史日志。
 
 ## 测试
 
@@ -181,10 +175,10 @@ python3 deploy/test_deploy.py --frontend /path/to/frontend.tar.gz   --backend /p
 - 搜图按 octo 的实际方式实现：预装免 Key 的 **Bing Images MCP** + 全局“必须遵守”规则。自然图片请求由模型调用 `image_search_search_images`，不要求用户写特殊问法。不改官方后端二进制。
 - MCP 下载真实搜索结果原图，Pillow 校验并压缩为最长边 1280px、JPEG 质量 82，剥离原始元数据，返回 MCP image content（官方自动保存成 FilePart）及同源 Markdown URL；前端直接显示附件并可点开缩放。不会用文章 og:image 代替搜图。
 - `/chat-images/<sha256>.jpg` 使用原有 Cookie 登录保护；无 Key、无任意 URL 图片代理。网络仅标准 HTTP(S)，拒绝私网/本机/回环、DNS 固定 IP 并优先 IPv4、每跳重新校验，限制下载 12MiB、像素 2500万、缓存 1GiB。缓存满时拒绝新增；每日 opencode-image-cleanup.timer 清理下载超过 7 天的 JPEG 缓存，仅匹配本部署 SHA256 文件名，不跟随符号链接；失败如实返回，Bing 页面格式/站点可用性可能变化。
-- 全局规则 `/etc/opencode/IMAGE_SEARCH.md` 由 config.instructions 加载，MCP 定义合并进 `/etc/opencode/opencode.json`；不覆盖其他 MCP/规则或 provider.env。安装器额外安装 python3-pil；卸载默认保留图片缓存，仅 --purge 删除 `/var/lib/opencode-images`。旧 `/image-preview` 返回 410，不再解析 OG。
+- 全局规则 `/etc/opencode/IMAGE_SEARCH.md` 由 config.instructions 加载，MCP 定义合并进 `/etc/opencode/opencode.json`；不覆盖其他 MCP/规则或 provider.env。安装器额外安装 python3-pil；卸载默认删除图片缓存 `/var/lib/opencode-images`（`--keep-data` 时保留）。旧 `/image-preview` 返回 410，不再解析 OG。
 - DOM 回归命令：`cd packages/app && bun test --conditions=browser --preload ./happydom.ts --preload ./test-browser/solid-dom-preload.ts ./test-browser/mobile-settings-context.test.ts ./test-browser/images-and-mobile-zoom.test.ts`。DOM 夹具不等同真实手机几何截图，仍需真实浏览器验证每个标签、圆环和图片。
 
-下载图片缓存保留 7 天，每日 systemd timer 自动清理；聊天记录中的内嵌 FilePart 不属于缓存文件，不删除会话数据库。过期的同源图片链接可能失效。卸载会停止并移除 timer/service；--purge 删除整个本部署图片缓存。
+下载图片缓存保留 7 天，每日 systemd timer 自动清理；聊天记录中的内嵌 FilePart 不属于缓存文件，不删除会话数据库。过期的同源图片链接可能失效。卸载会停止并移除 timer/service，默认连同整个图片缓存目录一起删除（`--keep-data` 时保留）。
 
 
 ## Keenable 网页搜索后备（免 Key）
@@ -193,4 +187,4 @@ python3 deploy/test_deploy.py --frontend /path/to/frontend.tar.gz   --backend /p
 - 通过官方支持的远程 MCP 注册 `keenable_search`：`https://api.keenable.ai/mcp-public`，Streamable HTTP，`oauth: false`，仅发送应用标识 `X-Keenable-Title: opencode-manatsu`，无密钥、账号、付费或本地额外服务。官方后端二进制不修改。该 MCP 另提供 `fetch_page_content`；本功能仅测试网页搜索。
 - 官方公开限额：出口 IP 共享，每个端点每小时 1,000 请求、每秒最多 10 次；`429` 遵守 `Retry-After`。这不是带账号的每月 100K 免费额度，也没有独占配额或可用性保证；搜索词会发往 Keenable，勿包含秘密。
 - 旧 dsh-custom 使用 `https://api.keenable.ai/mcp`（并有 `/v1/search/public` REST 回退）；本部署使用官方为免 Key 预设推荐的 `/mcp-public`，避免 OAuth 发现误提示登录。参考：https://docs.keenable.ai/mcp-server 、https://docs.keenable.ai/rate-limits 。
-- 安装/重装幂等合并 MCP 与全局规则，保留其他 MCP、权限及 provider.env。卸载默认保留 `/etc/opencode` 中的定义和规则以供重装；`--purge` 删除。远程 MCP 无额外本地进程、端口或清理定时器。
+- 安装/重装幂等合并 MCP 与全局规则，保留其他 MCP、权限及 provider.env。卸载默认随 `/etc/opencode` 一并删除这些定义和规则；`--keep-data` 时保留以供重装。远程 MCP 无额外本地进程、端口或清理定时器。

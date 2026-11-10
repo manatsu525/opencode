@@ -22,7 +22,7 @@ class Tests(unittest.TestCase):
   here=pathlib.Path(__file__).parent
   self.assertIn('keenable_search',(here/'install.sh').read_text())
   self.assertIn('install_image_search(root,host,port)',(here/'render.py').read_text())
-  self.assertIn('Remote keenable_search',(here/'uninstall.sh').read_text())
+  self.assertIn('keenable_search MCP config',(here/'uninstall.sh').read_text())
   self.assertIn('$(path /etc/opencode)',(here/'uninstall.sh').read_text())
 
 if __name__=='__main__':unittest.main()

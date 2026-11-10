@@ -149,6 +149,9 @@ if [[ "$(realpath "$HERE")" != "$(realpath "$(path /opt/opencode/deploy)")" ]]; 
   cp -a "$HERE/." "$(path /opt/opencode/deploy)/"
 fi
 install -m 755 "$tmp/backend/opencode" "$(path /opt/opencode/bin/opencode.new)"
+# Standalone short command for complete removal: sudo opencode-uninstall
+install -d -m 755 "$(path /usr/local/bin)"
+install -m 755 "$HERE/uninstall.sh" "$(path /usr/local/bin/opencode-uninstall)"
 mv "$(path /opt/opencode/bin/opencode.new)" "$(path /opt/opencode/bin/opencode)"
 if [[ -d "$(path /opt/opencode/frontend)" ]]; then
   mv "$(path /opt/opencode/frontend)" "$(path /opt/opencode/backups)/frontend-$(date +%Y%m%d-%H%M%S)-$$"
@@ -212,4 +215,4 @@ fi
 systemctl restart opencode-web.service
 python3 "$HERE/verify.py" --port "$port"
 demo_stopped=0
-printf 'Ready: https://%s:%s/ ; Login credentials: /etc/opencode/server.env (root-only); Go key: /etc/opencode/provider.env. No generation performed.\n' "$host" "$port"
+printf 'Ready: https://%s:%s/ ; Login credentials: /etc/opencode/server.env (root-only); Go key: /etc/opencode/provider.env. Uninstall everything: sudo opencode-uninstall. No generation performed.\n' "$host" "$port"
