@@ -112,3 +112,12 @@ If you are working on a project that's related to OpenCode and is using "opencod
 ---
 
 **Join our community** [Discord](https://discord.gg/opencode) | [X.com](https://x.com/opencode)
+
+
+## 个人 ARM64 / AMD64 部署（中文）
+
+固定官方 v2.2.1 后端、自定义前端改动、HTTPS 登录和独立 systemd 安装/卸载脚本，见 [中文部署说明](deploy/README.zh-CN.md)。不修改后端源码，不替换或改动 octo。
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/manatsu525/opencode/manatsu/v2.2.1/deploy/install.sh | sudo bash
+```
