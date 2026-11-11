@@ -17,6 +17,8 @@ import { sessionLabel } from "@/session/title"
 import { shouldOpenSessionInBackground } from "./open"
 import { createAltHold } from "./alt-hold"
 import "./view.css"
+import { createHomeSessionSelection, type BatchDeleteHandlers } from "./batch-delete"
+import { HomeSessionCheckbox, HomeSessionSelectionBar, type BatchDeleteTranslate } from "./batch-delete-view"
 import {
   HomeSessionStatusController,
   homeSessionSearchKey,
@@ -79,6 +81,7 @@ export type HomeSessionsViewProps = {
   onRenameSession: (server: ServerConnection.Key, session: SessionInfo, title: string) => Promise<boolean>
   onExportSession: (server: ServerConnection.Key, session: SessionInfo) => Promise<void>
   onDeleteSession: (server: ServerConnection.Key, session: SessionInfo) => void
+  onBatchDeleteSessions: (server: ServerConnection.Key, sessions: SessionInfo[], handlers: BatchDeleteHandlers) => void
   onSetHoverTarget: (element: HTMLElement) => void
   onSetThumbTrack: (element: HTMLDivElement) => void
   onSetContent: (element: HTMLDivElement) => void
@@ -104,9 +107,23 @@ type HomeSessionRowUI = {
   editor: { id: string; draft: string; renaming: boolean } | undefined
 }
 
+type HomeSessionSelectionProps = {
+  selecting: boolean
+  selected: boolean
+  selectionLocked: boolean
+  onToggleSelect: (sessionID: string) => void
+}
+
 export function HomeSessionsView(props: HomeSessionsViewProps) {
   const [rowUI, setRowUI] = createStore<HomeSessionRowUI>({ menu: undefined, editor: undefined })
   const [hover, setHover] = createStore<{ sessionID: string | undefined }>({ sessionID: undefined })
+  const t: BatchDeleteTranslate = (key, params) => props.language.t(key, params) ?? key
+  const select = createHomeSessionSelection({
+    sessions: () => props.groups.flatMap((group) => group.sessions.map((record) => record.session)),
+    onBeforeStart: () => setRowUI({ menu: undefined, editor: undefined }),
+    onDelete: (sessions, handlers) => props.onBatchDeleteSessions(props.server, sessions, handlers),
+  })
+  const selection = select.state
   const showLocations = createAltHold(props.desktop, props.onRevealLocations)
   // A list that arrives within the delay paints directly; slower loads show placeholder rows until it does, which stay
   // mounted while the list fades in over them.
@@ -136,18 +153,29 @@ export function HomeSessionsView(props: HomeSessionsViewProps) {
           hoveredSession={hover.sessionID}
           onHoverSession={(sessionID) => setHover("sessionID", sessionID)}
         />
-        <Show when={props.groups.length > 0 && props.canCreateSession}>
-          <div class="pointer-events-none absolute right-0 top-[68px] z-20 flex md:top-[84px] lg:top-[108px]">
+        <Show when={props.groups.length > 0 && !selection.active}>
+          <div class="pointer-events-none absolute right-0 top-[68px] z-20 flex gap-1 md:top-[84px] lg:top-[108px]">
             <Button
-              data-action="home-new-session"
+              data-action="home-select-sessions"
               variant="ghost-muted"
               size="normal"
-              icon="edit"
               class="pointer-events-auto h-7 px-2 [font-weight:530]"
-              onClick={props.onCreateSession}
+              onClick={select.start}
             >
-              {props.language.t("command.session.new")}
+              {t("home.sessions.select")}
             </Button>
+            <Show when={props.canCreateSession}>
+              <Button
+                data-action="home-new-session"
+                variant="ghost-muted"
+                size="normal"
+                icon="edit"
+                class="pointer-events-auto h-7 px-2 [font-weight:530]"
+                onClick={props.onCreateSession}
+              >
+                {props.language.t("command.session.new")}
+              </Button>
+            </Show>
           </div>
         </Show>
       </div>
@@ -210,6 +238,10 @@ export function HomeSessionsView(props: HomeSessionsViewProps) {
                             showLocations={showLocations()}
                             hoveredSession={hover.sessionID}
                             onHoverSession={(sessionID) => setHover("sessionID", sessionID)}
+                            selecting={selection.active}
+                            selected={!!selection.ids[record().session.id]}
+                            selectionLocked={!!selection.progress}
+                            onToggleSelect={select.toggle}
                           />
                         )}
                       </Key>
@@ -221,6 +253,18 @@ export function HomeSessionsView(props: HomeSessionsViewProps) {
           </Show>
         </Show>
       </div>
+      <Show when={selection.active}>
+        <HomeSessionSelectionBar
+          t={t}
+          count={select.selected().length}
+          total={select.listed().length}
+          allSelected={select.allSelected()}
+          progress={selection.progress}
+          onToggleAll={select.toggleAll}
+          onDelete={select.deleteSelected}
+          onCancel={select.end}
+        />
+      </Show>
     </section>
   )
 }
@@ -516,14 +560,15 @@ function HomeSessionGroupHeader(props: {
 }
 
 function HomeSessionRow(
-  props: HomeSessionsViewProps & {
-    record: HomeSessionRecord
-    rowUI: HomeSessionRowUI
-    setRowUI: SetStoreFunction<HomeSessionRowUI>
-    showLocations: boolean
-    hoveredSession: string | undefined
-    onHoverSession: (sessionID: string | undefined) => void
-  },
+  props: HomeSessionsViewProps &
+    HomeSessionSelectionProps & {
+      record: HomeSessionRecord
+      rowUI: HomeSessionRowUI
+      setRowUI: SetStoreFunction<HomeSessionRowUI>
+      showLocations: boolean
+      hoveredSession: string | undefined
+      onHoverSession: (sessionID: string | undefined) => void
+    },
 ) {
   const title = createMemo(() => sessionLabel(props.record.session))
   const location = createMemo(() => props.location(props.record))
@@ -607,10 +652,14 @@ function HomeSessionRow(
       data-project-name={!!showProjectName()}
       data-session-id={props.record.session.id}
       class="group/session relative flex h-10 min-w-0 items-center rounded-[6px] outline-none focus:outline-none focus-visible:outline-none"
+      data-selecting={props.selecting || undefined}
+      data-selected={(props.selecting && props.selected) || undefined}
       onContextMenu={(event) => {
         // While renaming, keep the native menu so paste and spelling work.
         if (editor()) return
         event.preventDefault()
+
+        if (props.selecting) return
         openMenu(event.currentTarget, event.clientX, event.clientY)
       }}
     >
@@ -673,15 +722,22 @@ function HomeSessionRow(
         <button
           type="button"
           data-component="home-session-row"
-          aria-haspopup="menu"
-          aria-expanded={!!menu()}
+          aria-haspopup={props.selecting ? undefined : "menu"}
+          aria-expanded={props.selecting ? undefined : !!menu()}
+          aria-pressed={props.selecting ? props.selected : undefined}
+          disabled={props.selecting && props.selectionLocked}
           class={`
             flex h-10 min-w-0 w-full flex-1 shrink-0 cursor-default items-center rounded-[6px] border-0
             bg-transparent py-3 ps-1.5 pe-3 md:ps-3 text-start text-v2-text-text-muted [font-weight:530]
             transition-[background-color,color,box-shadow] duration-[120ms] ease-in-out
             hover:bg-v2-overlay-simple-overlay-hover focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none
           `}
-          classList={{ "gap-1.5": props.desktop, "gap-2": !props.desktop, "pe-10": true }}
+          classList={{
+            "gap-1.5": props.desktop,
+            "gap-2": !props.desktop,
+            "pe-10": !props.selecting,
+            "bg-v2-overlay-simple-overlay-hover": props.selecting && props.selected,
+          }}
           onMouseDown={(event) => {
             if (event.button === 1) event.preventDefault()
           }}
@@ -693,7 +749,7 @@ function HomeSessionRow(
           onPointerDown={(event) => {
             suppressClick = false
 
-            if (event.pointerType !== "touch") return
+            if (event.pointerType !== "touch" || props.selecting) return
             clearLongPress()
             const element = event.currentTarget
             const x = event.clientX
@@ -724,6 +780,13 @@ function HomeSessionRow(
             openMenu(event.currentTarget, bounds.left + 12, bounds.bottom)
           }}
           onClick={(event) => {
+            if (props.selecting) {
+              suppressClick = false
+              props.onToggleSelect(sessionID())
+
+              return
+            }
+
             // The flag stays set until the long-press compatibility click
             // arrives, however delayed; keyboard activation (detail 0) is
             // never that click and passes through.
@@ -740,11 +803,14 @@ function HomeSessionRow(
             props.onOpenSession(props.record.session, { background: isBackgroundOpen(event) })
           }}
           onAuxClick={(event) => {
-            if (!isBackgroundOpen(event)) return
+            if (props.selecting || !isBackgroundOpen(event)) return
             event.preventDefault()
             props.onOpenSession(props.record.session, { background: true })
           }}
         >
+          <Show when={props.selecting}>
+            <HomeSessionCheckbox checked={props.selected} />
+          </Show>
           <HomeSessionLeadingController server={props.server} isOpenTab={props.isOpenTab} record={props.record} />
           <div
             data-slot="home-session-labels"
@@ -768,7 +834,7 @@ function HomeSessionRow(
           </div>
         </button>
       </Show>
-      <Show when={!editor()}>
+      <Show when={!editor() && !props.selecting}>
         {/* Visible entry to the row menu (rename, export, delete), so touch users need not discover long-press. */}
         <button
           type="button"

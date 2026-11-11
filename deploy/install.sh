@@ -2,7 +2,7 @@
 # Ubuntu/Debian systemd deployment; never changes octo or the main nginx service.
 set -euo pipefail
 # A piped script must not source helpers from an untrusted current directory.
-RELEASE_TAG=v2.2.1-manatsu.2
+RELEASE_TAG=v2.2.1-manatsu.3
 RELEASE_BASE=${OPENCODE_RELEASE_BASE_URL:-https://github.com/manatsu525/opencode/releases/download/$RELEASE_TAG}
 FRONTEND_ASSET=opencode-web-$RELEASE_TAG.tar.gz
 DEPLOY_ASSET=opencode-deploy-$RELEASE_TAG.tar.gz

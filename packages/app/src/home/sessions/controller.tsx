@@ -3,7 +3,7 @@ import { useDialog } from "@opencode/ui/context/dialog"
 import { Button } from "@opencode/ui/button"
 import { DialogFooter, DialogHeader, DialogTitleGroup, Dialog } from "@opencode/ui/dialog"
 import { useQuery, useQueryClient } from "@tanstack/solid-query"
-import { type Accessor, createEffect, createMemo, type JSX, startTransition, untrack } from "solid-js"
+import { type Accessor, createEffect, createMemo, type JSX, Show, startTransition, untrack } from "solid-js"
 import { notifySessionTabsRemoved } from "@/shell/titlebar/session-events"
 import { useCommand } from "@/shell/commands/command"
 import { HOME_SESSION_LIMIT, mergeHomeSessionIndex, retainHomeSessions } from "@/home/sessions/index"
@@ -12,7 +12,7 @@ import { useLanguage } from "@/runtime/i18n/language"
 import { ServerConnection } from "@/runtime/server/registry"
 import { sessionHasOpenTab, useTabs } from "@/shell/tabs/tabs"
 import { errorMessage } from "@/shell/layout/helpers"
-import { useSessionTabAvatarState } from "@/shell/layout/project-avatar-state"
+import { sessionBusy, useSessionTabAvatarState } from "@/shell/layout/project-avatar-state"
 import { sessionTreeIDs } from "@/session/requests/session-request-tree"
 import { pathKey } from "@/workspaces/path-key"
 import { fetchSessionExport, saveSessionExport, sessionExportFilename } from "@/session/commands/export"
@@ -20,6 +20,14 @@ import { usePlatform } from "@/runtime/platform/platform"
 import { sessionLabel, sessionTitle } from "@/session/title"
 import { showToast } from "@/shell/notifications/toast"
 import { archiveHomeSession } from "./archive"
+import {
+  BATCH_DELETE_CONCURRENCY,
+  partitionBatchDelete,
+  runBatchDelete,
+  type BatchDeleteHandlers,
+  type BatchDeleteResult,
+} from "./batch-delete"
+import { BatchDeleteSummary, type BatchDeleteTranslate } from "./batch-delete-view"
 import { homeSessionsQuery } from "./queries"
 import type { HomeController } from "../model"
 import { buildHomeSessionRecords, homeProjectForSession, homeSessionLocation, type HomeSessionRecord } from "./records"
@@ -225,31 +233,48 @@ export function createHomeSessionsController(home: HomeController) {
     }
   }
 
-  const remove = async (server: ServerConnection.Key, session: SessionInfo) => {
+  const connection = (server: ServerConnection.Key) => {
     const conn = home.server.list().find((item) => ServerConnection.key(item) === server)
     const ctx = conn ? home.server.context(conn) : undefined
 
-    if (!conn || !ctx) return false
+    return conn && ctx ? { conn, ctx } : undefined
+  }
+
+  // The delete request single and batch delete share: hide the row, remove the
+  // session, then close any tab showing it (which navigates away from it).
+  const removeSession = (
+    target: NonNullable<ReturnType<typeof connection>>,
+    session: SessionInfo,
+    options?: { animate?: boolean },
+  ) => {
+    const { conn, ctx } = target
     const ids = sessionTreeIDs(ctx.data.session.list(), session.id)
-    const rows = homeRowTops()
+    const rows = options?.animate ? homeRowTops() : undefined
     // session.deleted clears the local hide mutation before the refetch lands,
     // so the cached index must drop the row now or it briefly reappears.
     queryClient.setQueryData<SessionInfo[]>(["home-sessions", conn], (current) =>
       current?.filter((item) => item.id !== session.id),
     )
     const request = ctx.data.session.remove(session.id)
-    animateHomeRowsUp(rows)
 
-    return request
-      .then(() => {
-        notifySessionTabsRemoved({
-          server: ServerConnection.key(conn),
-          directory: session.location.directory,
-          sessionIDs: ids,
-        })
+    if (rows) animateHomeRowsUp(rows)
 
-        return true
+    return request.then(() => {
+      notifySessionTabsRemoved({
+        server: ServerConnection.key(conn),
+        directory: session.location.directory,
+        sessionIDs: ids,
       })
+    })
+  }
+
+  const remove = async (server: ServerConnection.Key, session: SessionInfo) => {
+    const target = connection(server)
+
+    if (!target) return false
+
+    return removeSession(target, session, { animate: true })
+      .then(() => true)
       .catch((cause) => {
         showToast({
           title: language.t("session.delete.failed.title"),
@@ -259,8 +284,94 @@ export function createHomeSessionsController(home: HomeController) {
         return false
       })
       .finally(() => {
-        void queryClient.invalidateQueries({ queryKey: ["home-sessions", conn], exact: true })
+        void queryClient.invalidateQueries({ queryKey: ["home-sessions", target.conn], exact: true })
       })
+  }
+
+  const isBusy = (server: ServerConnection.Key, sessionID: string) => {
+    const target = connection(server)
+
+    return target ? sessionBusy(target.ctx.data, sessionID) : false
+  }
+
+  const removeMany = async (
+    server: ServerConnection.Key,
+    sessions: readonly SessionInfo[],
+    onProgress?: (done: number, total: number) => void,
+  ): Promise<BatchDeleteResult> => {
+    const target = connection(server)
+
+    if (!target) return { deleted: [], failed: sessions.map((session) => session.id) }
+    const byID = new Map(sessions.map((session) => [session.id, session] as const))
+
+    try {
+      return await runBatchDelete(
+        sessions.map((session) => session.id),
+        (id) => removeSession(target, byID.get(id)!),
+        { concurrency: BATCH_DELETE_CONCURRENCY, onProgress },
+      )
+    } finally {
+      void queryClient.invalidateQueries({ queryKey: ["home-sessions", target.conn], exact: true })
+    }
+  }
+
+  const batchT: BatchDeleteTranslate = (key, params) => language.t(key, params) ?? key
+
+  function BatchDeleteDialog(props: {
+    server: ServerConnection.Key
+    sessions: SessionInfo[]
+    handlers: BatchDeleteHandlers
+  }) {
+    // Decided once when the dialog opens, so the list the user confirms is the list deleted.
+    const parts = partitionBatchDelete(props.sessions, (id) => isBusy(props.server, id))
+    const titles = parts.deletable.map(
+      (session) => sessionTitle(session.title) ?? language.t("command.session.new") ?? session.id,
+    )
+
+    const confirm = async () => {
+      dialog.close()
+      const skipped = parts.running.map((session) => session.id)
+      props.handlers.onStart(parts.deletable.length)
+      const result = await removeMany(props.server, parts.deletable, props.handlers.onProgress)
+      const skippedNote =
+        skipped.length > 0 ? language.t("session.batchDelete.skipped", { count: skipped.length }) : undefined
+
+      if (result.failed.length > 0) {
+        showToast({
+          variant: "error",
+          title: language.t("session.batchDelete.failed", { count: result.failed.length }),
+          description: [language.t("session.batchDelete.failed.description"), skippedNote].filter(Boolean).join(" "),
+        })
+      } else {
+        showToast({
+          variant: "success",
+          icon: "circle-check",
+          title: language.t("session.batchDelete.done", { count: result.deleted.length }),
+          description: skippedNote,
+        })
+      }
+
+      props.handlers.onDone({ ...result, skipped })
+    }
+
+    return (
+      <Dialog fit>
+        <DialogHeader hideClose>
+          <DialogTitleGroup title={language.t("session.batchDelete.title")} />
+        </DialogHeader>
+        <BatchDeleteSummary t={batchT} titles={titles} running={parts.running.length} />
+        <DialogFooter>
+          <Button variant="ghost" autofocus onClick={() => dialog.close()}>
+            {language.t("common.cancel")}
+          </Button>
+          <Show when={parts.deletable.length > 0}>
+            <Button variant="danger" data-action="home-session-batch-delete-confirm" onClick={confirm}>
+              {language.t("session.batchDelete.button", { count: parts.deletable.length })}
+            </Button>
+          </Show>
+        </DialogFooter>
+      </Dialog>
+    )
   }
 
   function DeleteDialog(props: { server: ServerConnection.Key; session: SessionInfo }) {
@@ -373,6 +484,8 @@ export function createHomeSessionsController(home: HomeController) {
       export: exportSession,
       showDelete: (server: ServerConnection.Key, session: SessionInfo) =>
         dialog.show(() => <DeleteDialog server={server} session={session} />),
+      showBatchDelete: (server: ServerConnection.Key, sessions: SessionInfo[], handlers: BatchDeleteHandlers) =>
+        dialog.show(() => <BatchDeleteDialog server={server} sessions={sessions} handlers={handlers} />),
     },
     tab: {
       isOpen: (record: HomeSessionRecord) => {
