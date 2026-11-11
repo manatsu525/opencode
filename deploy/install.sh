@@ -2,7 +2,7 @@
 # Ubuntu/Debian systemd deployment; never changes octo or the main nginx service.
 set -euo pipefail
 # A piped script must not source helpers from an untrusted current directory.
-RELEASE_TAG=v2.2.1-manatsu.1
+RELEASE_TAG=v2.2.1-manatsu.2
 RELEASE_BASE=${OPENCODE_RELEASE_BASE_URL:-https://github.com/manatsu525/opencode/releases/download/$RELEASE_TAG}
 FRONTEND_ASSET=opencode-web-$RELEASE_TAG.tar.gz
 DEPLOY_ASSET=opencode-deploy-$RELEASE_TAG.tar.gz
@@ -157,7 +157,7 @@ if [[ -d "$(path /opt/opencode/frontend)" ]]; then
   mv "$(path /opt/opencode/frontend)" "$(path /opt/opencode/backups)/frontend-$(date +%Y%m%d-%H%M%S)-$$"
 fi
 mv "$tmp/frontend" "$(path /opt/opencode/frontend)"
-# Render also merges image_search + keyless remote keenable_search and their global fallback rules.
+# Render also merges image_search + the keyless keenable_search fallback proxy and their global search rules.
 python3 "$HERE/render.py" "$ROOT" "$host" "$port" "$backend_port" "$workspace" "$tmp/login.json" "$CERT_DAYS" "$auth_port"
 if [[ -n "$ROOT" ]]; then
   mkdir -p "$(path /var/lib/opencode/workspace)"

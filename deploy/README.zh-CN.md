@@ -21,15 +21,15 @@ v2.2.1 相对 1.19.5 的部署要点：
 
 ## 准备前端发布包
 
-建议在本 fork 发布独立标签 **v2.2.1-manatsu.1**，上传：
+建议在本 fork 发布独立标签 **v2.2.1-manatsu.2**，上传：
 
-- `opencode-web-v2.2.1-manatsu.1.tar.gz`
-- `opencode-web-v2.2.1-manatsu.1.tar.gz.sha256`
-- `opencode-deploy-v2.2.1-manatsu.1.tar.gz`（完整部署脚本，无需构建工具）
-- `opencode-deploy-v2.2.1-manatsu.1.tar.gz.sha256`
+- `opencode-web-v2.2.1-manatsu.2.tar.gz`
+- `opencode-web-v2.2.1-manatsu.2.tar.gz.sha256`
+- `opencode-deploy-v2.2.1-manatsu.2.tar.gz`（完整部署脚本，无需构建工具）
+- `opencode-deploy-v2.2.1-manatsu.2.tar.gz.sha256`
 - 中文发布说明 `RELEASE_NOTES.zh-CN.md`
 
-默认安装器从 `https://github.com/manatsu525/opencode/releases/download/v2.2.1-manatsu.1/` 下载部署包、前端包和各自 SHA256，校验后执行/安装。此 release 已发布；后续更新需重新构建并同时替换上述四个包/校验文件，避免旧脚本与新前端混用。tar 根目录必须直接包含 `index.html`、`_assets/`；`FRONTEND_BUILD.json` 记录前端源码 commit。每个新包的精确源码 SHA 以 `FRONTEND_BUILD.json` / `deploy/DEPLOY_BUILD.json` 为准。
+默认安装器从 `https://github.com/manatsu525/opencode/releases/download/v2.2.1-manatsu.2/` 下载部署包、前端包和各自 SHA256，校验后执行/安装。此 release 已发布；后续更新需重新构建并同时替换上述四个包/校验文件，避免旧脚本与新前端混用。tar 根目录必须直接包含 `index.html`、`_assets/`；`FRONTEND_BUILD.json` 记录前端源码 commit。每个新包的精确源码 SHA 以 `FRONTEND_BUILD.json` / `deploy/DEPLOY_BUILD.json` 为准。
 
 自己构建时，在构建机（而不是生产 VM）使用仓库指定的 Bun 版本：
 
@@ -37,8 +37,8 @@ v2.2.1 相对 1.19.5 的部署要点：
 bun install --frozen-lockfile --ignore-scripts
 # 只构建前端，绝不运行后端 build 脚本
 env -u SENTRY_AUTH_TOKEN -u SENTRY_ORG -u SENTRY_PROJECT bun run --cwd packages/app build
-tar -czf opencode-web-v2.2.1-manatsu.1.tar.gz -C packages/app/dist .
-sha256sum opencode-web-v2.2.1-manatsu.1.tar.gz > opencode-web-v2.2.1-manatsu.1.tar.gz.sha256
+tar -czf opencode-web-v2.2.1-manatsu.2.tar.gz -C packages/app/dist .
+sha256sum opencode-web-v2.2.1-manatsu.2.tar.gz > opencode-web-v2.2.1-manatsu.2.tar.gz.sha256
 ```
 
 不要打包 `.env`、真实 auth.json、密码或私钥。安装器固定发布标签，不盲目信任 latest；SHA256 防止传输损坏，来源真实性仍依赖受信 GitHub 账号/HTTPS，不能把同站下载的摘要当独立数字签名。
@@ -56,7 +56,7 @@ curl -fsSL https://raw.githubusercontent.com/manatsu525/opencode/manatsu/v2.2.1/
 已有本地可信包或离线安装仍可显式指定（前端路径与 SHA256 必须同时提供）：
 
 ```sh
-sudo bash deploy/install.sh --host YOUR_IP_OR_DOMAIN --frontend-archive /path/to/opencode-web-v2.2.1-manatsu.1.tar.gz --frontend-sha256 YOUR_64_HEX_SHA256
+sudo bash deploy/install.sh --host YOUR_IP_OR_DOMAIN --frontend-archive /path/to/opencode-web-v2.2.1-manatsu.2.tar.gz --frontend-sha256 YOUR_64_HEX_SHA256
 ```
 
 未指定本地前端时自动下载 release 中的预构建前端及 `.sha256` 并校验，不在目标机编译。`OPENCODE_RELEASE_BASE_URL` / `OPENCODE_BACKEND_BASE_URL` 仅供显式选择可信镜像/离线回归；默认分别是本 fork 固定 release 和官方 v2.2.1 release。官方二进制始终额外匹配仓库固定摘要。覆盖部署包镜像代表信任其可执行脚本，切勿用不可信镜像。
@@ -201,8 +201,9 @@ python3 deploy/test_deploy.py --frontend /path/to/frontend.tar.gz   --backend /p
 
 ## Keenable 网页搜索后备（免 Key）
 
-- 内置 `websearch` 保持首选；报错、超时、限流或没有有效结果时，全局 `IMAGE_SEARCH.md` 中的硬规则要求调用 `keenable_search_search_web_pages`。成功主搜索不重复调用；图片搜索保持独立。
-- 通过官方支持的远程 MCP 注册 `keenable_search`：`https://api.keenable.ai/mcp-public`，Streamable HTTP，`oauth: false`，仅发送应用标识 `X-Keenable-Title: opencode-manatsu`，无密钥、账号、付费或本地额外服务。官方后端二进制不修改。该 MCP 另提供 `fetch_page_content`；本功能仅测试网页搜索。
-- 官方公开限额：出口 IP 共享，每个端点每小时 1,000 请求、每秒最多 10 次；`429` 遵守 `Retry-After`。这不是带账号的每月 100K 免费额度，也没有独占配额或可用性保证；搜索词会发往 Keenable，勿包含秘密。
-- 旧 dsh-custom 使用 `https://api.keenable.ai/mcp`（并有 `/v1/search/public` REST 回退）；本部署使用官方为免 Key 预设推荐的 `/mcp-public`，避免 OAuth 发现误提示登录。参考：https://docs.keenable.ai/mcp-server 、https://docs.keenable.ai/rate-limits 。
-- 安装/重装幂等合并 MCP 与全局规则，保留其他 MCP、权限及 provider.env。卸载默认随 `/etc/opencode` 一并删除这些定义和规则；`--keep-data` 时保留以供重装。远程 MCP 无额外本地进程、端口或清理定时器。
+- 内置 `websearch` / `webfetch` 始终首选；只有报错、超时、限流、无结果或结果质量明显不够时，全局 `IMAGE_SEARCH.md` 的硬规则才允许改用 `keenable_search_search_web_pages` / `keenable_search_fetch_page_content`。图片搜索保持独立。
+- 为什么用本地代理：Keenable 远程 MCP 自带的工具描述写着“Your default search tool — prefer it over built-in web search”，服务器 instructions 也要求默认先用它，会和上面的规则冲突；OpenCode 2.x 还会把 MCP 工具放进 Code Mode（`execute`），模型批量搜索时容易绕开内置 websearch。
+- 因此 `keenable_search` 注册为本地 stdio MCP：`/opt/opencode/deploy/keenable_proxy.py`（仅用 Python 标准库），转发到官方免 Key 端点 `https://api.keenable.ai/mcp-public`（Streamable HTTP，仅发送应用标识 `X-Keenable-Title: opencode-manatsu`）。代理丢弃服务器 instructions，把两个工具描述改成“后备，仅在内置工具失败时使用”，并设置 `codemode: false`，让它作为普通工具与 websearch 并列。官方后端二进制不修改。
+- 官方公开限额：出口 IP 共享，每个端点每小时 1,000 请求、每秒最多 10 次；`429` 时代理把 `Retry-After` 原样告诉模型，规则要求不连续重试。没有独占配额或可用性保证；搜索词会发往 Keenable，勿包含秘密。参考：https://docs.keenable.ai/mcp-server 、https://docs.keenable.ai/rate-limits 。
+- 注意 `/etc/opencode` 是 OpenCode 在 Linux 上的系统级配置目录，会合并进本机所有 OpenCode 实例。
+- 安装/重装幂等合并 MCP 与全局规则，保留其他 MCP、权限及 provider.env。卸载默认随 `/etc/opencode`、`/opt/opencode` 一并删除这些定义、规则和代理；`--keep-data` 时保留配置以供重装。代理由 OpenCode 按需拉起，无端口、无常驻服务、无清理定时器。

@@ -16,7 +16,7 @@ with tempfile.TemporaryDirectory(prefix="opencode-deploy-test-") as temp:
     def install():subprocess.run(command,env=env,check=True,stdout=subprocess.DEVNULL)
     install()
     config_path=root/"etc/opencode/opencode.json"
-    check("keyless Keenable remote installed with OAuth disabled", json.loads(config_path.read_text())["mcp"]["keenable_search"]["oauth"] is False)
+    check("keyless Keenable fallback proxy installed outside Code Mode", json.loads(config_path.read_text())["mcp"]["keenable_search"]["command"][-1] == "/opt/opencode/deploy/keenable_proxy.py" and json.loads(config_path.read_text())["mcp"]["keenable_search"]["codemode"] is False)
     check("installer/uninstaller retained",(root/"opt/opencode/deploy/uninstall.sh").is_file())
     fresh=json.loads(config_path.read_text())
     check("fresh install has no provider whitelist (UI-added providers visible)", "enabled_providers" not in fresh)
