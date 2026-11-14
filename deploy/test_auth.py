@@ -42,15 +42,17 @@ class AuthTests(unittest.TestCase):
         self.assertEqual(self.request('/login','POST','',{'Origin':'null','X-Original-Origin':'null'})[0],403)
     def test_wrong_password(self):self.assertEqual(self.login(password='incorrect')[0],401)
     def test_wrong_username(self):self.assertEqual(self.login(username='opencode')[0],401)
+    def restarted(self,password=None):
+        return make_server(('127.0.0.1',0),self.username,password or self.password,'https://test.example:8558',self.temp.name)
     def test_cookie_survives_restart(self):
-        token=self.token().split('=',1)[1];self.assertTrue(Sessions(self.temp.name,self.username,self.password).valid(token))
+        token=self.token().split('=',1)[1];other=self.restarted();self.assertEqual(other.sessions.user(token),self.username);other.server_close()
     def test_password_change_invalidates(self):
-        token=self.token().split('=',1)[1];self.assertFalse(Sessions(self.temp.name,self.username,'changed-secret').valid(token))
+        token=self.token().split('=',1)[1];other=self.restarted('changed-secret');self.assertIsNone(other.sessions.user(token));other.server_close()
     def test_token_not_stored_raw(self):
-        token=self.token().split('=',1)[1];file=pathlib.Path(self.temp.name)/'sessions.json';text=file.read_text();self.assertNotIn(token,text);self.assertNotIn(self.password,text);self.assertIn(hashlib.sha256(token.encode()).hexdigest(),text);self.assertEqual(file.stat().st_mode&0o777,0o600)
+        token=self.token().split('=',1)[1];file=pathlib.Path(self.temp.name)/'sessions.json';text=file.read_text();self.assertNotIn(token,text);self.assertNotIn(self.password,text);self.assertNotIn(self.password,(pathlib.Path(self.temp.name)/'users.json').read_text());self.assertIn(hashlib.sha256(token.encode()).hexdigest(),text);self.assertEqual(file.stat().st_mode&0o777,0o600)
     def test_expiry(self):
         token=self.token().split('=',1)[1]
-        with patch('auth.time.time',return_value=time.time()+MAX_AGE+1):self.assertFalse(Sessions(self.temp.name,self.username,self.password).valid(token))
+        with patch('auth.time.time',return_value=time.time()+MAX_AGE+1):self.assertIsNone(self.server.sessions.user(token))
     def test_cross_origin_post_denied(self):self.assertEqual(self.request('/login','POST','',{'Origin':'https://test.example:8557'})[0],403)
     def test_cross_origin_websocket_denied(self):self.assertEqual(self.request(headers={'Cookie':self.token(),'X-Original-Origin':'https://test.example:8557'})[0],403)
     def test_same_origin_websocket_allowed(self):self.assertEqual(self.request(headers={'Cookie':self.token(),'X-Original-Origin':'https://test.example:8558'})[0],200)
@@ -63,5 +65,66 @@ class AuthTests(unittest.TestCase):
     def test_basic_browser_upgrade(self):
         status,headers,_=self.request(headers={'Authorization':'Basic '+base64.b64encode((self.username+':'+self.password).encode()).decode(),'X-Original-Accept':'text/html'});self.assertEqual(status,200);self.assertIn('Set-Cookie',headers)
     def test_oversized_login(self):self.assertEqual(self.request('/login','POST','x'*8193)[0],400)
+
+    # ---- multi-user ----
+    ORIGIN='https://test.example:8558'
+    def account(self,cookie,body):
+        return self.request('/account/api','POST',json.dumps(body),{'Cookie':cookie,'Origin':self.ORIGIN,'Content-Type':'application/json','X-OpenCode-Account':'1'})
+    def login_as(self,user,password):
+        status,headers,_=self.request('/login','POST',urllib.parse.urlencode({'username':user,'password':password}),{'Origin':self.ORIGIN,'Content-Type':'application/x-www-form-urlencoded'})
+        return status,(headers.get('Set-Cookie','').split(';')[0])
+    def test_primary_routes_to_primary_backend(self):
+        status,headers,_=self.request(headers={'Cookie':self.token()});self.assertEqual(status,200);self.assertEqual(headers['X-Opencode-Port'],'4096')
+    def test_v1_sessions_migrate(self):
+        self.server.shutdown();self.server.server_close();self.thread.join()
+        folder=pathlib.Path(self.temp.name)
+        for name in ('users.json','instances.json'):(folder/name).unlink()
+        token='legacy-token';fp=hashlib.sha256((self.username+'\0'+self.password).encode()).hexdigest()
+        (folder/'sessions.json').write_text(json.dumps({'credentials':fp,'tokens':{hashlib.sha256(token.encode()).hexdigest():int(time.time())+100}}))
+        self.server=self.restarted();self.thread=threading.Thread(target=self.server.serve_forever,daemon=True);self.thread.start()
+        self.assertEqual(self.server.sessions.user(token),self.username)
+    def test_admin_creates_user_with_own_backend(self):
+        admin=self.token()
+        status,_,body=self.account(admin,{'action':'create','name':'alice','password':'alice-secret-1','admin':False});self.assertEqual(status,200,body)
+        instances=json.loads((pathlib.Path(self.temp.name)/'instances.json').read_text())
+        self.assertEqual(instances,{'users':{'alice':4101}})
+        status,alice=self.login_as('alice','alice-secret-1');self.assertEqual(status,303)
+        status,headers,_=self.request(headers={'Cookie':alice});self.assertEqual(headers['X-Opencode-Port'],'4101');self.assertEqual(headers['X-Opencode-User'],'alice')
+        # a normal user cannot manage users
+        status,_,_=self.account(alice,{'action':'create','name':'bob','password':'bob-secret-12'});self.assertEqual(status,403)
+        status,_,_=self.account(alice,{'action':'delete','name':'test-admin'});self.assertEqual(status,403)
+        # but can change their own password (requires the current one)
+        self.assertEqual(self.account(alice,{'action':'passwd','old':'wrong-pass','new':'alice-secret-2'})[0],403)
+        self.assertEqual(self.account(alice,{'action':'passwd','old':'alice-secret-1','new':'alice-secret-2'})[0],200)
+        self.assertEqual(self.login_as('alice','alice-secret-1')[0],401);self.assertEqual(self.login_as('alice','alice-secret-2')[0],303)
+    def test_reset_and_delete_revoke_sessions(self):
+        admin=self.token();self.account(admin,{'action':'create','name':'bob','password':'bob-secret-12'})
+        _,bob=self.login_as('bob','bob-secret-12');self.assertEqual(self.request(headers={'Cookie':bob})[0],200)
+        self.assertEqual(self.account(admin,{'action':'reset','name':'bob','password':'bob-secret-34'})[0],200)
+        self.assertEqual(self.request(headers={'Cookie':bob})[0],401)
+        _,bob=self.login_as('bob','bob-secret-34')
+        self.assertEqual(self.account(admin,{'action':'delete','name':'bob'})[0],200)
+        self.assertEqual(self.request(headers={'Cookie':bob})[0],401)
+        self.assertEqual(json.loads((pathlib.Path(self.temp.name)/'instances.json').read_text()),{'users':{}})
+    def test_primary_protected(self):
+        admin=self.token();self.account(admin,{'action':'create','name':'carol','password':'carol-secret','admin':True})
+        _,carol=self.login_as('carol','carol-secret')
+        for body in ({'action':'delete','name':'test-admin'},{'action':'reset','name':'test-admin','password':'xxxxxxxxxx'},{'action':'set_admin','name':'test-admin','admin':False}):
+            self.assertEqual(self.account(carol,body)[0],403)
+        self.assertEqual(self.account(carol,{'action':'delete','name':'carol'})[0],403)
+    def test_account_rejects_cross_site_and_bad_names(self):
+        admin=self.token()
+        status,_,_=self.request('/account/api','POST','{"action":"create"}',{'Cookie':admin,'Origin':'https://evil.example','Content-Type':'application/json','X-OpenCode-Account':'1'});self.assertEqual(status,403)
+        status,_,_=self.request('/account/api','POST','{"action":"create"}',{'Cookie':admin,'Origin':self.ORIGIN,'Content-Type':'application/json'});self.assertEqual(status,403)
+        for name in ('Alice','../x','a b','',  'x'*40):
+            self.assertEqual(self.account(admin,{'action':'create','name':name,'password':'long-enough-1'})[0],400)
+        self.assertEqual(self.account(admin,{'action':'create','name':'dave','password':'short'})[0],400)
+    def test_state(self):
+        admin=self.token();self.account(admin,{'action':'create','name':'erin','password':'erin-secret-1'})
+        status,_,body=self.request('/account/state',headers={'Cookie':admin});data=json.loads(body)
+        self.assertTrue(data['admin']);self.assertEqual([u['name'] for u in data['users']],['erin','test-admin'])
+        self.assertNotIn('hash',body.decode())
+        _,erin=self.login_as('erin','erin-secret-1');data=json.loads(self.request('/account/state',headers={'Cookie':erin})[2])
+        self.assertFalse(data['admin']);self.assertNotIn('users',data);self.assertEqual(data['workspace'],'/var/lib/opencode/users/erin/workspace')
 
 if __name__=='__main__':unittest.main()

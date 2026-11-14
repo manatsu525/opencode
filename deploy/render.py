@@ -13,9 +13,10 @@ def p(name): return pathlib.Path(root + name)
 def write(name, value, mode=0o644):
     file = p(name); file.parent.mkdir(parents=True, exist_ok=True)
     file.write_text(value); file.chmod(mode)
-for folder in ["/etc/opencode", "/etc/opencode/tls", "/var/lib/opencode", "/var/cache/opencode", "/var/lib/opencode-web", "/var/lib/opencode-web/client", "/var/lib/opencode-web/proxy"]:
+for folder in ["/etc/opencode", "/etc/opencode/tls", "/etc/opencode/users", "/var/lib/opencode", "/var/lib/opencode/users", "/var/cache/opencode", "/var/lib/opencode-web", "/var/lib/opencode-web/client", "/var/lib/opencode-web/proxy"]:
     p(folder).mkdir(parents=True, exist_ok=True)
 p("/etc/opencode").chmod(0o755)
+p("/var/lib/opencode/users").chmod(0o700)
 p("/etc/opencode/tls").chmod(0o750)
 server = p("/etc/opencode/server.env")
 login = json.loads(pathlib.Path(login_file).read_text())
@@ -58,7 +59,7 @@ Type=simple
 User=root
 Group=root
 WorkingDirectory={workspace}
-Environment=HOME=/var/lib/opencode XDG_DATA_HOME=/var/lib/opencode/data XDG_CONFIG_HOME=/var/lib/opencode/config XDG_CACHE_HOME=/var/cache/opencode XDG_STATE_HOME=/var/lib/opencode/state OPENCODE_CONFIG=/etc/opencode/opencode.json
+Environment=HOME=/var/lib/opencode XDG_DATA_HOME=/var/lib/opencode/data XDG_CONFIG_HOME=/var/lib/opencode/config XDG_CACHE_HOME=/var/cache/opencode XDG_STATE_HOME=/var/lib/opencode/state OPENCODE_CONFIG=/etc/opencode/opencode.json OPENCODE_WORKSPACE={workspace}
 EnvironmentFile=/etc/opencode/server.env
 EnvironmentFile=-/etc/opencode/provider.env
 ExecStart=/opt/opencode/bin/opencode serve --hostname 127.0.0.1 --port {backend_port}
@@ -79,6 +80,57 @@ TimeoutStopSec=30
 WantedBy=multi-user.target
 """
 write("/etc/systemd/system/opencode.service", backend)
+# Extra users (managed by admins at /account): one backend each with its own workspace, chat history (data/state)
+# and cache; HOME, config, skills and the rest of the filesystem are shared with the primary backend.
+write("/etc/systemd/system/opencode-user@.service", f"""[Unit]
+Description=OpenCode {VERSION} backend for user %i
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+Group=root
+WorkingDirectory=/var/lib/opencode/users/%i/workspace
+Environment=HOME=/var/lib/opencode XDG_DATA_HOME=/var/lib/opencode/users/%i/data XDG_CONFIG_HOME=/var/lib/opencode/config XDG_CACHE_HOME=/var/lib/opencode/users/%i/cache XDG_STATE_HOME=/var/lib/opencode/users/%i/state OPENCODE_CONFIG=/etc/opencode/opencode.json
+EnvironmentFile=/etc/opencode/server.env
+EnvironmentFile=-/etc/opencode/provider.env
+EnvironmentFile=/etc/opencode/users/%i.env
+ExecStart=/opt/opencode/bin/opencode serve --hostname 127.0.0.1 --port ${{OPENCODE_PORT}}
+Restart=on-failure
+RestartSec=3
+UMask=0077
+NoNewPrivileges=false
+PrivateTmp=false
+ProtectSystem=false
+ProtectHome=false
+MemoryHigh=768M
+MemoryMax=1536M
+CPUQuota=150%
+TasksMax=256
+TimeoutStopSec=30
+
+[Install]
+WantedBy=multi-user.target
+""")
+write("/etc/systemd/system/opencode-users-sync.service", """[Unit]
+Description=Start/stop per-user OpenCode backends to match the login gate's user list
+
+[Service]
+Type=oneshot
+User=root
+ExecStart=/usr/bin/python3 /opt/opencode/deploy/users_sync.py
+""")
+write("/etc/systemd/system/opencode-users-sync.path", """[Unit]
+Description=Watch the OpenCode user list
+
+[Path]
+PathChanged=/var/lib/opencode-auth/instances.json
+Unit=opencode-users-sync.service
+
+[Install]
+WantedBy=multi-user.target
+""")
 write("/etc/systemd/system/opencode-web.service", """[Unit]
 Description=Custom OpenCode HTTPS frontend (isolated nginx)
 After=network-online.target opencode.service opencode-auth.service
@@ -115,7 +167,7 @@ Type=simple
 User=opencode-auth
 Group=opencode-auth
 EnvironmentFile=/etc/opencode/server.env
-Environment=OPENCODE_PUBLIC_ORIGIN=https://{host}:{port} OPENCODE_AUTH_PORT={auth_port} OPENCODE_AUTH_STATE=/var/lib/opencode-auth OPENCODE_WORKSPACE={workspace}
+Environment=OPENCODE_PUBLIC_ORIGIN=https://{host}:{port} OPENCODE_AUTH_PORT={auth_port} OPENCODE_AUTH_STATE=/var/lib/opencode-auth OPENCODE_WORKSPACE={workspace} OPENCODE_BACKEND_PORT={backend_port}
 ExecStart=/usr/bin/python3 /opt/opencode/deploy/auth.py
 Restart=on-failure
 RestartSec=2
@@ -134,7 +186,7 @@ PrivateDevices=true
 ProtectSystem=strict
 ProtectHome=tmpfs
 TemporaryFileSystem=/var:ro
-BindPaths=/var/lib/opencode-auth {workspace}
+BindPaths=/var/lib/opencode-auth {workspace} /var/lib/opencode/users
 InaccessiblePaths=-/etc/opencode -/etc/shadow -/etc/shadow- -/etc/gshadow -/etc/gshadow- -/etc/ssh -/etc/sudoers -/etc/sudoers.d -/etc/ssl/private -/etc/letsencrypt -/opt/opencode/backups -/opt/opencode/bin -/boot -/srv -/mnt -/media -/run/credentials
 ProtectKernelTunables=true
 ProtectKernelModules=true
@@ -207,6 +259,8 @@ http {
   auth_request /_opencode_auth;
   auth_request_set $opencode_authorization $upstream_http_x_opencode_authorization;
   auth_request_set $opencode_session_cookie $upstream_http_set_cookie;
+  # Which backend serves the signed-in user (primary or opencode-user@NAME); set only by the gate.
+  auth_request_set $opencode_port $upstream_http_x_opencode_port;
   error_page 497 =308 https://$host:$server_port$request_uri;
   client_max_body_size 50m;
   root /opt/opencode/frontend;
@@ -249,6 +303,13 @@ LOGIN_HEADERS
    proxy_hide_header Referrer-Policy;
   }
   location /files/ { return 404; }
+  # Own password, and user management for admins (the sidecar checks the session and role again).
+  location ~ ^/account(/state|/api)?$ {
+   client_max_body_size 8k;
+   proxy_pass http://127.0.0.1:AUTH;
+   proxy_set_header Cookie $http_cookie;
+   proxy_set_header Authorization $http_authorization;
+  }
   location ~ ^/chat-images/([a-f0-9]+[.]jpg)$ {
    alias /var/lib/opencode-images/$1;
   }
@@ -259,7 +320,7 @@ LOGIN_HEADERS
    try_files $uri =404;
   }
   location ~ ^/(API)(/|$) {
-   proxy_pass http://127.0.0.1:BACKEND;
+   proxy_pass http://127.0.0.1:$opencode_port;
    proxy_http_version 1.1;
    proxy_set_header Host $http_host;
    proxy_set_header Authorization $opencode_authorization;

@@ -45,11 +45,11 @@ def tty_run(command, steps, env):
 
 with tempfile.TemporaryDirectory(prefix='opencode-release-test-') as temp:
     root=pathlib.Path(temp);fixtures=root/'fixtures';fixtures.mkdir();work=root/'work';work.mkdir()
-    bundle=fixtures/'opencode-deploy-v2.2.1-manatsu.3.tar.gz'
+    bundle=fixtures/'opencode-deploy-v2.2.1-manatsu.4.tar.gz'
     with tarfile.open(bundle,'w:gz') as archive:
         archive.add(here,arcname='deploy',filter=lambda member:None if '__pycache__' in member.name else member)
     sidecar(bundle)
-    frontend=fixtures/'opencode-web-v2.2.1-manatsu.3.tar.gz';frontend.symlink_to(pathlib.Path(args.frontend).resolve());sidecar(frontend)
+    frontend=fixtures/'opencode-web-v2.2.1-manatsu.4.tar.gz';frontend.symlink_to(pathlib.Path(args.frontend).resolve());sidecar(frontend)
     asset=subprocess.check_output(['bash','-c','source "$1/common.sh"; asset_name "$2" glibc','test',str(here),args.arch],text=True).strip()
     (fixtures/asset).symlink_to(pathlib.Path(args.backend).resolve())
     (fixtures/'install.sh').write_bytes((here/'install.sh').read_bytes())

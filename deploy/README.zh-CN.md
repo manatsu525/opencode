@@ -21,15 +21,15 @@ v2.2.1 相对 1.19.5 的部署要点：
 
 ## 准备前端发布包
 
-建议在本 fork 发布独立标签 **v2.2.1-manatsu.3**，上传：
+建议在本 fork 发布独立标签 **v2.2.1-manatsu.4**，上传：
 
-- `opencode-web-v2.2.1-manatsu.3.tar.gz`
-- `opencode-web-v2.2.1-manatsu.3.tar.gz.sha256`
-- `opencode-deploy-v2.2.1-manatsu.3.tar.gz`（完整部署脚本，无需构建工具）
-- `opencode-deploy-v2.2.1-manatsu.3.tar.gz.sha256`
+- `opencode-web-v2.2.1-manatsu.4.tar.gz`
+- `opencode-web-v2.2.1-manatsu.4.tar.gz.sha256`
+- `opencode-deploy-v2.2.1-manatsu.4.tar.gz`（完整部署脚本，无需构建工具）
+- `opencode-deploy-v2.2.1-manatsu.4.tar.gz.sha256`
 - 中文发布说明 `RELEASE_NOTES.zh-CN.md`
 
-默认安装器从 `https://github.com/manatsu525/opencode/releases/download/v2.2.1-manatsu.3/` 下载部署包、前端包和各自 SHA256，校验后执行/安装。此 release 已发布；后续更新需重新构建并同时替换上述四个包/校验文件，避免旧脚本与新前端混用。tar 根目录必须直接包含 `index.html`、`_assets/`；`FRONTEND_BUILD.json` 记录前端源码 commit。每个新包的精确源码 SHA 以 `FRONTEND_BUILD.json` / `deploy/DEPLOY_BUILD.json` 为准。
+默认安装器从 `https://github.com/manatsu525/opencode/releases/download/v2.2.1-manatsu.4/` 下载部署包、前端包和各自 SHA256，校验后执行/安装。此 release 已发布；后续更新需重新构建并同时替换上述四个包/校验文件，避免旧脚本与新前端混用。tar 根目录必须直接包含 `index.html`、`_assets/`；`FRONTEND_BUILD.json` 记录前端源码 commit。每个新包的精确源码 SHA 以 `FRONTEND_BUILD.json` / `deploy/DEPLOY_BUILD.json` 为准。
 
 自己构建时，在构建机（而不是生产 VM）使用仓库指定的 Bun 版本：
 
@@ -38,8 +38,8 @@ bun install --frozen-lockfile --ignore-scripts
 # 只构建前端，绝不运行后端 build 脚本
 env -u SENTRY_AUTH_TOKEN -u SENTRY_ORG -u SENTRY_PROJECT bun run --cwd packages/app build
 # 发布包不含 source map、sw.js（nginx 对 /sw.js 返回 404）和 _headers
-tar -czf opencode-web-v2.2.1-manatsu.3.tar.gz -C packages/app/dist --exclude='*.map' --exclude=./sw.js --exclude=./_headers .
-sha256sum opencode-web-v2.2.1-manatsu.3.tar.gz > opencode-web-v2.2.1-manatsu.3.tar.gz.sha256
+tar -czf opencode-web-v2.2.1-manatsu.4.tar.gz -C packages/app/dist --exclude='*.map' --exclude=./sw.js --exclude=./_headers .
+sha256sum opencode-web-v2.2.1-manatsu.4.tar.gz > opencode-web-v2.2.1-manatsu.4.tar.gz.sha256
 ```
 
 不要打包 `.env`、真实 auth.json、密码或私钥。安装器固定发布标签，不盲目信任 latest；SHA256 防止传输损坏，来源真实性仍依赖受信 GitHub 账号/HTTPS，不能把同站下载的摘要当独立数字签名。
@@ -57,7 +57,7 @@ curl -fsSL https://raw.githubusercontent.com/manatsu525/opencode/manatsu/v2.2.1/
 已有本地可信包或离线安装仍可显式指定（前端路径与 SHA256 必须同时提供）：
 
 ```sh
-sudo bash deploy/install.sh --host YOUR_IP_OR_DOMAIN --frontend-archive /path/to/opencode-web-v2.2.1-manatsu.3.tar.gz --frontend-sha256 YOUR_64_HEX_SHA256
+sudo bash deploy/install.sh --host YOUR_IP_OR_DOMAIN --frontend-archive /path/to/opencode-web-v2.2.1-manatsu.4.tar.gz --frontend-sha256 YOUR_64_HEX_SHA256
 ```
 
 未指定本地前端时自动下载 release 中的预构建前端及 `.sha256` 并校验，不在目标机编译。`OPENCODE_RELEASE_BASE_URL` / `OPENCODE_BACKEND_BASE_URL` 仅供显式选择可信镜像/离线回归；默认分别是本 fork 固定 release 和官方 v2.2.1 release。官方二进制始终额外匹配仓库固定摘要。覆盖部署包镜像代表信任其可执行脚本，切勿用不可信镜像。
@@ -140,6 +140,17 @@ HTTPS 首次启用会换浏览器 origin，演示的本地设置/假会话不会
 
 安装器会放一个独立的短命令 `/usr/local/bin/opencode-uninstall`（与 `deploy/uninstall.sh` 相同，不依赖 `/opt/opencode` 中的其他文件）。手动上传的 tar/脚本源目录不属于自动删除范围，确认不再使用后自行清理。
 
+## 多用户
+
+- 安装时设置的账号是**主账号**（管理员），继续使用原后端 `opencode.service`（4096）、原工作区 `/var/lib/opencode/workspace` 和原聊天记录。
+- 管理员打开 `https://<主机>:8558/account`：新建用户（可设为管理员）、重置密码、设/取消管理员、删除用户。所有用户都可在此修改自己的密码和退出登录。主账号不能被别人改密码、降级或删除；不能删除自己。
+- 每个其他用户一个独立后端 `opencode-user@<用户名>`（端口 4101 起），**工作目录**（`/var/lib/opencode/users/<用户名>/workspace`）和**聊天记录**（同目录下 data/state）互相独立，缓存也独立；其他一切共享：HOME（`/var/lib/opencode`）、全局配置/技能/MCP（`/etc/opencode`、`/var/lib/opencode/config`）、模型与 Go key、整个文件系统。右侧"工作区文件"面板和 `/files/download` 链接按登录用户解析到各自工作区。
+- 共享意味着隔离只是方便而非安全边界：后端都以 root 运行、工具全部允许，任何用户的智能体都能读写整台机器（包括别人的工作区）。只给信任的人开账号。
+- 原理：登录 gate（opencode-auth）保存用户（PBKDF2 哈希，`/var/lib/opencode-auth/users.json`），并写出 `instances.json`（用户名→端口）；root 的 `opencode-users-sync.path` 监视它，按需创建目录、`enable --now` 或停止对应后端。nginx 用 auth_request 返回的 `X-Opencode-Port` 把 `/api` 转发到该用户的后端。删除用户时后端停止，目录移到 `/var/lib/opencode/users-deleted/<用户名>-<时间>`（不立即删除，确认不要后手动清理）。
+- 每个后端空闲约 150–450 MB 内存，上限同主后端（MemoryMax 1536M）。重装/升级会重启所有用户后端；卸载会一并删除。
+- 同一浏览器切换账号后，前端可能记得上一个账号打开过的项目目录；建议不同用户用不同浏览器/设备。
+- 旧版本的登录 Cookie 升级后自动归属主账号，无需重新登录。Basic 认证（API 客户端）只接受主账号的安装密码。
+
 ## 卸载（默认彻底删除）
 
 任选其一，二者等价：
@@ -149,7 +160,7 @@ sudo opencode-uninstall
 curl -fsSL https://raw.githubusercontent.com/manatsu525/opencode/manatsu/v2.2.1/deploy/uninstall.sh | sudo bash
 ```
 
-终端只问一次 `确定要彻底卸载 OpenCode 吗？… [Y/n]`，直接回车即确认，输入 n 取消（不删除任何东西）。确认后删除：全部 systemd 服务/定时器（opencode、opencode-web、opencode-auth、opencode-image-cleanup）、`/opt/opencode`（二进制、前端、部署脚本、备份）、`/etc/opencode`（登录凭据、Go key、自签证书、独立 nginx 配置、MCP 与全局规则）、`/var/lib/opencode`（会话和默认工作区）、`/var/cache/opencode`、`/var/lib/opencode-auth`（Cookie 登录）、`/var/lib/opencode-images`（下载的图片）、`/var/lib/opencode-web`（独立 nginx 运行目录和访问日志）、系统用户/组 opencode、opencode-web、opencode-auth、本安装器添加并记录的防火墙规则，最后删除 `opencode-uninstall` 自身。**不可恢复，务必先自行备份会话/工作区。**
+终端只问一次 `确定要彻底卸载 OpenCode 吗？… [Y/n]`，直接回车即确认，输入 n 取消（不删除任何东西）。确认后删除：全部 systemd 服务/定时器（opencode、各用户的 opencode-user@*、opencode-users-sync、opencode-web、opencode-auth、opencode-image-cleanup）、`/opt/opencode`（二进制、前端、部署脚本、备份）、`/etc/opencode`（登录凭据、Go key、自签证书、独立 nginx 配置、MCP 与全局规则）、`/var/lib/opencode`（会话和默认工作区）、`/var/cache/opencode`、`/var/lib/opencode-auth`（Cookie 登录）、`/var/lib/opencode-images`（下载的图片）、`/var/lib/opencode-web`（独立 nginx 运行目录和访问日志）、系统用户/组 opencode、opencode-web、opencode-auth、本安装器添加并记录的防火墙规则，最后删除 `opencode-uninstall` 自身。**不可恢复，务必先自行备份会话/工作区。**
 
 - 无交互终端（cron、CI、ssh 不带 -t）时脚本拒绝执行，需显式加 `--yes`：`curl -fsSL …/uninstall.sh | sudo bash -s -- --yes` 或 `sudo opencode-uninstall --yes`。
 - 只想移除程序、保留数据/凭据/证书/配置以便重装：`sudo opencode-uninstall --keep-data`。之后要彻底清除再运行上面的 curl 命令。

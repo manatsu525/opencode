@@ -40,8 +40,12 @@ if ((!yes)); then
   exec 3>&-
   case "$answer" in ''|[Yy]|[Yy][Ee][Ss]|是) ;; *) printf 'Cancelled; nothing removed.\n'; exit 1 ;; esac
 fi
-units=(opencode-image-cleanup.timer opencode-image-cleanup.service opencode-web.service opencode-auth.service opencode.service)
+units=(opencode-image-cleanup.timer opencode-image-cleanup.service opencode-users-sync.path opencode-users-sync.service opencode-web.service opencode-auth.service opencode.service)
 if [[ -z "$ROOT" ]]; then
+  # Per-user backends first (one opencode-user@NAME per extra user).
+  for env in /etc/opencode/users/*.env; do
+    if [[ -e "$env" ]]; then systemctl disable --now "opencode-user@$(basename "$env" .env).service" >/dev/null 2>&1 || true; fi
+  done
   systemctl disable --now "${units[@]}" >/dev/null 2>&1 || true
   # Only the firewall rule this installer added and recorded is removed.
   if [[ -f /etc/opencode/firewall-owned-port ]]; then
@@ -52,6 +56,7 @@ if [[ -z "$ROOT" ]]; then
   fi
 fi
 for unit in "${units[@]}"; do rm -f -- "$(path "/etc/systemd/system/$unit")"; done
+rm -f -- "$(path /etc/systemd/system/opencode-user@.service)"
 # Binaries, frontend, deploy helpers/backups, the isolated nginx runtime + access log.
 rm -rf -- "$(path /opt/opencode)" "$(path /var/lib/opencode-web)"
 if ((!keep)); then
