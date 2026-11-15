@@ -212,7 +212,10 @@ python3 deploy/test_deploy.py --frontend /path/to/frontend.tar.gz   --backend /p
 - 上下文圆环在窄屏可点击，弹出 token、上下文占比和费用，支持关闭；桌面保留官方行为。
 - 两代设置窗口在 768px 以下使用全屏、顶部横向滚动标签、堆叠的标签/控件以及明确关闭按钮。
 - 工具结果只有两类会显示为行内图片：结构化图片附件（FilePart），以及 image_search 工具自己的输出。bash、webfetch、websearch 等原始输出（报错网页、日志、HTML）里出现的图片网址一律不自动出图——此前 lain.la 报错页里的 `sadlain.PNG` 被误显示即属此类。助手正文中明确写出的 Markdown 图片仍正常显示。
-- 搜图按 octo 的实际方式实现：预装免 Key 的 **Bing Images MCP** + 全局“必须遵守”规则。自然图片请求由模型调用 `image_search_search_images`，不要求用户写特殊问法。不改官方后端二进制。
+- 搜图预装免 Key 的 **image_search MCP** + 全局“必须遵守”规则。自然图片请求由模型调用 `image_search_search_images`，不要求用户写特殊问法。不改官方后端二进制。
+- 搜图来源优先级：**Google 图片**（共享无头 Chromium，`opencode-imgbrowser.service`，仅监听 127.0.0.1:4098）> 搜狗 > 雅虎 > DuckDuckGo > 免 Key 必应（最不可靠，最后兜底）。非 Google 来源按关键词做相关性过滤。安装时会装 Playwright 1.47 + Chromium（约 700MB）到 `/opt/opencode/imgbrowser`，装失败只告警，搜图退回必应。
+- 若本机装了 Cloudflare WARP（`warp-cli` 代理模式，127.0.0.1:40000），浏览器与必应请求经 WARP 出口，不改系统路由；没装就直连。安装脚本不会自动安装 WARP。
+- **验证码接力**：Google 弹人机验证时，工具返回 `https://域名:端口/imgcaptcha/`（需登录），模型把链接发给用户；手机打开后看到无头浏览器实时画面，点击/输入会转发过去，验证通过后 cookie 保存在 `/var/lib/opencode-imgbrowser`。验证期间仍用其它来源出图。
 - MCP 下载真实搜索结果原图，Pillow 校验并压缩为最长边 1280px、JPEG 质量 82，剥离原始元数据，返回 MCP image content（官方自动保存成 FilePart）及同源 Markdown URL；前端直接显示附件并可点开缩放。不会用文章 og:image 代替搜图。
 - `/chat-images/<sha256>.jpg` 使用原有 Cookie 登录保护；无 Key、无任意 URL 图片代理。网络仅标准 HTTP(S)，拒绝私网/本机/回环、DNS 固定 IP 并优先 IPv4、每跳重新校验，限制下载 12MiB、像素 2500万、缓存 1GiB。缓存满时拒绝新增；每日 opencode-image-cleanup.timer 清理下载超过 7 天的 JPEG 缓存，仅匹配本部署 SHA256 文件名，不跟随符号链接；失败如实返回，Bing 页面格式/站点可用性可能变化。
 - 全局规则 `/etc/opencode/IMAGE_SEARCH.md` 由 config.instructions 加载，MCP 定义合并进 `/etc/opencode/opencode.json`；不覆盖其他 MCP/规则或 provider.env。安装器额外安装 python3-pil；卸载默认删除图片缓存 `/var/lib/opencode-images`（`--keep-data` 时保留）。旧 `/image-preview` 返回 410，不再解析 OG。

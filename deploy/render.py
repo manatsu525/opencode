@@ -210,6 +210,32 @@ TasksMax=64
 [Install]
 WantedBy=multi-user.target
 """)
+# Shared headless Chromium for Google image search + the /imgcaptcha/ human relay. Egress through a local
+# Cloudflare WARP SOCKS proxy when one is installed (warp-cli in proxy mode on 127.0.0.1:40000).
+import shutil as _shutil
+imgproxy = "socks5://127.0.0.1:40000" if _shutil.which("warp-cli") else ""
+write("/etc/systemd/system/opencode-imgbrowser.service", f"""[Unit]
+Description=OpenCode shared headless browser for image search and captcha relay
+After=network-online.target warp-svc.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+Environment=PYTHONPATH=/opt/opencode/imgbrowser/lib
+Environment=PLAYWRIGHT_BROWSERS_PATH=/opt/opencode/imgbrowser/browsers
+Environment=IMGBROWSER_PORT=4098
+Environment=IMGBROWSER_PROFILE=/var/lib/opencode-imgbrowser/profile
+Environment=IMGBROWSER_PROXY={imgproxy}
+ExecStart=/usr/bin/python3 /opt/opencode/deploy/imgbrowser.py
+Restart=on-failure
+RestartSec=5
+MemoryMax=1500M
+StateDirectory=opencode-imgbrowser
+StateDirectoryMode=0700
+
+[Install]
+WantedBy=multi-user.target
+""")
 write("/etc/systemd/system/opencode-image-cleanup.service", """[Unit]
 Description=Remove OpenCode downloaded image cache older than seven days
 
@@ -321,6 +347,13 @@ LOGIN_HEADERS
    proxy_pass http://127.0.0.1:AUTH;
    proxy_set_header Cookie $http_cookie;
    proxy_set_header Authorization $http_authorization;
+  }
+  # Human captcha relay for the image-search browser (imgbrowser.py); login required (server auth_request).
+  location /imgcaptcha/ {
+   client_max_body_size 8k;
+   proxy_pass http://127.0.0.1:4098;
+   proxy_buffering off;
+   proxy_read_timeout 60s;
   }
   location ~ ^/chat-images/([a-f0-9]+[.]jpg)$ {
    alias /var/lib/opencode-images/$1;

@@ -40,7 +40,7 @@ if ((!yes)); then
   exec 3>&-
   case "$answer" in ''|[Yy]|[Yy][Ee][Ss]|是) ;; *) printf 'Cancelled; nothing removed.\n'; exit 1 ;; esac
 fi
-units=(opencode-image-cleanup.timer opencode-image-cleanup.service opencode-users-sync.timer opencode-users-sync.path opencode-users-sync.service opencode-web.service opencode-auth.service opencode.service)
+units=(opencode-image-cleanup.timer opencode-image-cleanup.service opencode-users-sync.timer opencode-users-sync.path opencode-users-sync.service opencode-web.service opencode-auth.service opencode.service opencode-imgbrowser.service)
 if [[ -z "$ROOT" ]]; then
   # Per-user backends first (one opencode-user@NAME per extra user).
   for env in /etc/opencode/users/*.env; do
@@ -62,7 +62,7 @@ rm -rf -- "$(path /opt/opencode)" "$(path /var/lib/opencode-web)"
 if ((!keep)); then
   # Sessions, default workspace, caches, cookie-login state, downloaded images, credentials, TLS cert,
   # nginx config and the image_search/keenable_search MCP config + global rules.
-  rm -rf -- "$(path /var/lib/opencode)" "$(path /var/cache/opencode)" "$(path /var/lib/opencode-auth)" "$(path /var/lib/opencode-images)" "$(path /etc/opencode)"
+  rm -rf -- "$(path /var/lib/opencode)" "$(path /var/cache/opencode)" "$(path /var/lib/opencode-auth)" "$(path /var/lib/opencode-images)" "$(path /var/lib/opencode-imgbrowser)" "$(path /etc/opencode)"
 fi
 if [[ -z "$ROOT" ]]; then
   systemctl daemon-reload

@@ -1,5 +1,9 @@
-"""Bounded public HTTP(S) only; DNS-pinned connections, no cookies/auth/proxy credentials."""
-import http.client,ipaddress,socket,ssl,urllib.parse
+"""Bounded public HTTP(S) only; DNS-pinned connections, no cookies/auth/proxy credentials.
+
+An optional local SOCKS5 egress (e.g. Cloudflare WARP proxy mode on 127.0.0.1:40000) can carry a
+request: the target is still resolved and checked here and the proxy is asked to CONNECT to the pinned
+public IP, so the SSRF checks are unchanged. Search engines degrade results for some datacenter IPs."""
+import http.client,ipaddress,os,socket,ssl,struct,urllib.parse
 UA='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36'
 def target(url,deny_host=None):
     if any(ord(c)<32 for c in url) or len(url)>8192:raise ValueError('Invalid URL')
@@ -14,7 +18,39 @@ def target(url,deny_host=None):
     if not addresses:raise ValueError('No public target')
     if deny_host and addresses & {row[4][0] for row in socket.getaddrinfo(deny_host,port,type=socket.SOCK_STREAM)}:raise ValueError('Own target')
     return p,host,port,sorted(addresses,key=lambda value:(ipaddress.ip_address(value).version!=4,value))
-def fetch(url,limit,deny_host=None,accept='*/*'):
+def proxy_address(value=None):
+    """Parse socks5://127.0.0.1:PORT (loopback only, no credentials); None when unset or invalid."""
+    value=os.environ.get('OPENCODE_IMAGE_PROXY','') if value is None else value
+    if not value:return None
+    p=urllib.parse.urlsplit(value)
+    try:port=p.port
+    except ValueError:return None
+    if p.scheme not in ('socks5','socks5h') or p.username or p.password or not port or p.path not in ('','/'):return None
+    try:
+        if not ipaddress.ip_address(p.hostname).is_loopback:return None
+    except ValueError:return None
+    return (p.hostname,port)
+def socks_connect(proxy,ip,port,timeout=8):
+    raw=socket.create_connection(proxy,timeout)
+    try:
+        raw.sendall(b'\x05\x01\x00')
+        if raw.recv(2)!=b'\x05\x00':raise OSError('SOCKS5 proxy refused')
+        address=ipaddress.ip_address(ip)
+        raw.sendall(b'\x05\x01\x00'+(b'\x01' if address.version==4 else b'\x04')+address.packed+struct.pack('>H',port))
+        head=raw.recv(4)
+        if len(head)<4 or head[1]!=0:raise OSError('SOCKS5 connect failed')
+        rest={1:4,4:16}.get(head[3])
+        if rest is None:
+            n=raw.recv(1);rest=n[0] if n else 0
+        need=rest+2
+        while need>0:
+            chunk=raw.recv(need)
+            if not chunk:raise OSError('SOCKS5 reply truncated')
+            need-=len(chunk)
+        return raw
+    except BaseException:
+        raw.close();raise
+def fetch(url,limit,deny_host=None,accept='*/*',proxy=None):
     for _ in range(4):
         p,host,port,addresses=target(url,deny_host)
         class Pinned(http.client.HTTPConnection):
@@ -23,7 +59,7 @@ def fetch(url,limit,deny_host=None,accept='*/*'):
                 for ip in addresses:
                     raw=None
                     try:
-                        raw=socket.create_connection((ip,port),8)
+                        raw=socks_connect(proxy,ip,port) if proxy else socket.create_connection((ip,port),8)
                         self.sock=ssl.create_default_context().wrap_socket(raw,server_hostname=host) if p.scheme=='https' else raw
                         return
                     except OSError as error:

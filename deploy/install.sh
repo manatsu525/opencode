@@ -193,6 +193,15 @@ runuser -u opencode-web -- nginx -t -p /var/lib/opencode-web/ -c /etc/opencode/n
 systemctl daemon-reload
 systemctl enable opencode.service opencode-web.service opencode-auth.service opencode-users-sync.path
 systemctl enable --now opencode-image-cleanup.timer opencode-users-sync.timer
+# Image-search browser (Playwright + Chromium, ~700 MB). Optional: search falls back to keyless Bing without it.
+if [[ ! -d /opt/opencode/imgbrowser/lib/playwright ]]; then
+  if python3 -m pip install --quiet --target /opt/opencode/imgbrowser/lib playwright==1.47.0 \
+     && PYTHONPATH=/opt/opencode/imgbrowser/lib PLAYWRIGHT_BROWSERS_PATH=/opt/opencode/imgbrowser/browsers python3 -m playwright install --with-deps chromium >/dev/null; then :; else
+    printf 'Warning: image-search browser not installed; image search uses Bing only.\n' >&2
+  fi
+fi
+if [[ -d /opt/opencode/imgbrowser/lib/playwright ]]; then systemctl enable opencode-imgbrowser.service; systemctl restart opencode-imgbrowser.service || true; fi
+
 systemctl start opencode-users-sync.path
 systemctl restart opencode-auth.service opencode.service
 # Per-user backends (opencode-user@NAME) follow the gate's user list; restart them on the new binary/config.

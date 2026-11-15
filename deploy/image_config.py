@@ -17,7 +17,7 @@ Keenable 是无 Key 的公开后备搜索：每次取 3–5 条结果即可；�
 '''
 def install(root,host,port):
     root=pathlib.Path(root or '/');directory=root/'etc/opencode';file=directory/'opencode.json';config=json.loads(file.read_text()) if file.exists() else {}
-    config.setdefault('mcp',{})['image_search']={'type':'local','command':['/usr/bin/python3','/opt/opencode/deploy/image_search.py'],'enabled':True,'timeout':120000,'environment':{'OPENCODE_IMAGE_ORIGIN':'https://'+('['+host+']' if ':' in host else host)+':'+str(port),'OPENCODE_IMAGE_DIR':'/var/lib/opencode-images'}}
+    config.setdefault('mcp',{})['image_search']={'type':'local','command':['/usr/bin/python3','/opt/opencode/deploy/image_search.py'],'enabled':True,'timeout':120000,'environment':{'OPENCODE_IMAGE_ORIGIN':'https://'+('['+host+']' if ':' in host else host)+':'+str(port),'OPENCODE_IMAGE_DIR':'/var/lib/opencode-images','OPENCODE_IMAGE_PROXY':'socks5://127.0.0.1:40000'}}
     # Local stdio proxy to Keenable's keyless /mcp-public: drops the server's "use me first" instructions,
     # marks its tools as fallback, and stays out of Code Mode so it is a normal tool beside websearch.
     config.setdefault('mcp',{})['keenable_search']={'type':'local','command':['/usr/bin/python3','/opt/opencode/deploy/keenable_proxy.py'],'enabled':True,'codemode':False,'timeout':60000,'environment':{'KEENABLE_TITLE':'opencode-manatsu'}}
