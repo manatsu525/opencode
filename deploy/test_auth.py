@@ -90,6 +90,12 @@ class AuthTests(unittest.TestCase):
         self.assertEqual(instances,{'users':{'alice':4101}})
         status,alice=self.login_as('alice','alice-secret-1');self.assertEqual(status,303)
         status,headers,_=self.request(headers={'Cookie':alice});self.assertEqual(headers['X-Opencode-Port'],'4101');self.assertEqual(headers['X-Opencode-User'],'alice')
+        # a normal user can use but not change the shared provider keys
+        get=lambda method,uri,cookie:self.request(headers={'Cookie':cookie,'X-Original-Method':method,'X-Original-URI':uri})[0]
+        self.assertEqual(get('GET','/api/credential',alice),200);self.assertEqual(get('GET','/api/integration?location=x',alice),200)
+        for method,uri in (('POST','/api/credential'),('DELETE','/api/credential/cred_1'),('PATCH','/api/credential/cred_1'),('POST','/api/integration/vercel/connect/key'),('POST','/api/%69ntegration/x/connect/oauth'),('DELETE','/API/Credential/x/')):
+            self.assertEqual(get(method,uri,alice),403,(method,uri));self.assertEqual(get(method,uri,admin),200,(method,uri))
+        self.assertEqual(get('POST','/api/session',alice),200);self.assertEqual(get('POST','/api/credentials-other',alice),200)
         # a normal user cannot manage users
         status,_,_=self.account(alice,{'action':'create','name':'bob','password':'bob-secret-12'});self.assertEqual(status,403)
         status,_,_=self.account(alice,{'action':'delete','name':'test-admin'});self.assertEqual(status,403)

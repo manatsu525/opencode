@@ -29,6 +29,12 @@ def hash_password(password):
     salt=secrets.token_hex(16)
     return 'pbkdf2_sha256$%d$%s$%s'%(ITERATIONS,salt,hashlib.pbkdf2_hmac('sha256',password.encode(),salt.encode(),ITERATIONS).hex())
 
+PROVIDER_PATHS=('/api/credential','/api/integration')
+def provider_write(method, uri):
+    """A request that adds, changes or removes a provider key/login (anything but a read on those routes)."""
+    path=urllib.parse.unquote(urllib.parse.urlsplit(uri or '/').path).rstrip('/').lower()
+    if not any(path==p or path.startswith(p+'/') for p in PROVIDER_PATHS):return False
+    return (method or 'POST').upper() not in ('GET','HEAD','OPTIONS')
 def check_password(stored, password):
     try:
         kind,rounds,salt,digest=stored.split('$')
@@ -255,7 +261,10 @@ def make_server(address, username, password, origin, folder, workspace=None, bac
                 if not self.same_origin():self.reply(403);return
                 name=sessions.user(self.token())
                 info=users.get(name) if name else None
-                if info:self.reply(200,headers={'X-Opencode-Authorization':backend,'X-Opencode-Port':str(info['port']),'X-Opencode-User':name});return
+                if info:
+                    # Provider keys and logins are shared by every user (users_sync copies them), so only admins may change them.
+                    if not info.get('admin') and provider_write(self.headers.get('X-Original-Method',''),self.headers.get('X-Original-URI','')):self.reply(403);return
+                    self.reply(200,headers={'X-Opencode-Authorization':backend,'X-Opencode-Port':str(info['port']),'X-Opencode-User':name});return
                 if basic_ok(self.headers.get('Authorization','')):
                     headers={'X-Opencode-Authorization':backend,'X-Opencode-Port':str(users.backend_port),'X-Opencode-User':username}
                     # Convert a browser's cached Basic login once; API checks do not mint sessions.

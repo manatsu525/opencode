@@ -40,7 +40,7 @@ if ((!yes)); then
   exec 3>&-
   case "$answer" in ''|[Yy]|[Yy][Ee][Ss]|是) ;; *) printf 'Cancelled; nothing removed.\n'; exit 1 ;; esac
 fi
-units=(opencode-image-cleanup.timer opencode-image-cleanup.service opencode-users-sync.path opencode-users-sync.service opencode-web.service opencode-auth.service opencode.service)
+units=(opencode-image-cleanup.timer opencode-image-cleanup.service opencode-users-sync.timer opencode-users-sync.path opencode-users-sync.service opencode-web.service opencode-auth.service opencode.service)
 if [[ -z "$ROOT" ]]; then
   # Per-user backends first (one opencode-user@NAME per extra user).
   for env in /etc/opencode/users/*.env; do

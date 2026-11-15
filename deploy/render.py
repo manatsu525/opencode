@@ -131,6 +131,17 @@ Unit=opencode-users-sync.service
 [Install]
 WantedBy=multi-user.target
 """)
+write("/etc/systemd/system/opencode-users-sync.timer", """[Unit]
+Description=Share the primary user's provider credentials with every OpenCode user
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=1min
+Unit=opencode-users-sync.service
+
+[Install]
+WantedBy=timers.target
+""")
 write("/etc/systemd/system/opencode-web.service", """[Unit]
 Description=Custom OpenCode HTTPS frontend (isolated nginx)
 After=network-online.target opencode.service opencode-auth.service
@@ -274,6 +285,7 @@ SERVER_HEADERS
    proxy_set_header Cookie $http_cookie;
    proxy_set_header Authorization $http_authorization;
    proxy_set_header X-Original-URI $request_uri;
+   proxy_set_header X-Original-Method $request_method;
    proxy_set_header X-Original-Accept $http_accept;
    proxy_set_header X-Original-Origin $http_origin;
   }

@@ -2,7 +2,7 @@
 # Ubuntu/Debian systemd deployment; never changes octo or the main nginx service.
 set -euo pipefail
 # A piped script must not source helpers from an untrusted current directory.
-RELEASE_TAG=v2.2.1-manatsu.4
+RELEASE_TAG=v2.2.1-manatsu.5
 RELEASE_BASE=${OPENCODE_RELEASE_BASE_URL:-https://github.com/manatsu525/opencode/releases/download/$RELEASE_TAG}
 FRONTEND_ASSET=opencode-web-$RELEASE_TAG.tar.gz
 DEPLOY_ASSET=opencode-deploy-$RELEASE_TAG.tar.gz
@@ -192,7 +192,7 @@ installed_version=$(/opt/opencode/bin/opencode --version)
 runuser -u opencode-web -- nginx -t -p /var/lib/opencode-web/ -c /etc/opencode/nginx.conf
 systemctl daemon-reload
 systemctl enable opencode.service opencode-web.service opencode-auth.service opencode-users-sync.path
-systemctl enable --now opencode-image-cleanup.timer
+systemctl enable --now opencode-image-cleanup.timer opencode-users-sync.timer
 systemctl start opencode-users-sync.path
 systemctl restart opencode-auth.service opencode.service
 # Per-user backends (opencode-user@NAME) follow the gate's user list; restart them on the new binary/config.
