@@ -226,11 +226,16 @@ Environment=PLAYWRIGHT_BROWSERS_PATH=/opt/opencode/imgbrowser/browsers
 Environment=IMGBROWSER_PORT=4098
 Environment=IMGBROWSER_PROFILE=/var/lib/opencode-imgbrowser/profile
 Environment=IMGBROWSER_PROXY={imgproxy}
+# Nothing long-lived in /tmp: Chromium/Playwright scratch goes under the state dir (wiped at each start),
+# and the host /tmp is hidden from this service, so /tmp cleaners can never break image search.
+Environment=TMPDIR=/var/lib/opencode-imgbrowser/tmp
+PrivateTmp=true
+ExecStartPre=/usr/bin/find /var/lib/opencode-imgbrowser/tmp -mindepth 1 -delete
 ExecStart=/usr/bin/python3 /opt/opencode/deploy/imgbrowser.py
 Restart=on-failure
 RestartSec=5
 MemoryMax=1500M
-StateDirectory=opencode-imgbrowser
+StateDirectory=opencode-imgbrowser opencode-imgbrowser/tmp
 StateDirectoryMode=0700
 
 [Install]
