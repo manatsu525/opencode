@@ -241,6 +241,23 @@ StateDirectoryMode=0700
 [Install]
 WantedBy=multi-user.target
 """)
+write("/etc/systemd/system/opencode-imgbrowser-restart.service", """[Unit]
+Description=Weekly restart of OpenCode image-search browser (wipes its scratch dir)
+
+[Service]
+Type=oneshot
+ExecStart=/bin/systemctl try-restart opencode-imgbrowser.service
+""")
+write("/etc/systemd/system/opencode-imgbrowser-restart.timer", """[Unit]
+Description=Weekly restart of OpenCode image-search browser
+
+[Timer]
+OnCalendar=Sun *-*-* 19:30:00 UTC
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+""")
 write("/etc/systemd/system/opencode-image-cleanup.service", """[Unit]
 Description=Remove OpenCode downloaded image cache older than seven days
 

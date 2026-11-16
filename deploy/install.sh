@@ -200,7 +200,7 @@ if [[ ! -d /opt/opencode/imgbrowser/lib/playwright ]]; then
     printf 'Warning: image-search browser not installed; image search uses Bing only.\n' >&2
   fi
 fi
-if [[ -d /opt/opencode/imgbrowser/lib/playwright ]]; then systemctl enable opencode-imgbrowser.service; systemctl restart opencode-imgbrowser.service || true; fi
+if [[ -d /opt/opencode/imgbrowser/lib/playwright ]]; then systemctl enable opencode-imgbrowser.service; systemctl enable --now opencode-imgbrowser-restart.timer; systemctl restart opencode-imgbrowser.service || true; fi
 
 systemctl start opencode-users-sync.path
 systemctl restart opencode-auth.service opencode.service
