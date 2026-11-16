@@ -2,6 +2,7 @@ import { Component, Show, createMemo, createResource } from "solid-js"
 import { createMediaQuery } from "@solid-primitives/media"
 import { Select } from "@opencode/ui/select"
 import { Switch } from "@opencode/ui/switch"
+import { Button } from "@opencode/ui/button"
 import { TimelineDetailControl } from "@/settings/timeline-detail"
 import { useLanguage } from "@/runtime/i18n/language"
 import { usePlatform } from "@/runtime/platform/platform"
@@ -228,6 +229,52 @@ const LanguageSetting = () => {
   )
 }
 
+// Self-hosted (manatsu) deployment: the nginx login gate owns accounts. Shows the signed-in user, links to
+// /account and signs out through the gate's POST /logout. Hidden when the page is not behind that gate.
+const AccountSection: Component = () => {
+  const [state] = createResource(async () => {
+    const response = await fetch("/account/state", { headers: { "X-OpenCode-Account": "1" }, credentials: "same-origin" })
+    if (!response.ok) return undefined
+    const data = (await response.json().catch(() => undefined)) as { user?: string; admin?: boolean } | undefined
+    return data?.user ? data : undefined
+  })
+  let form: HTMLFormElement | undefined
+
+  return (
+    <Show when={state()}>
+      {(info) => (
+        <div class="settings-section" data-section="account">
+          <h3 class="settings-section-title">账号</h3>
+          <SettingsList>
+            <SettingsRow
+              title={info().user + (info().admin ? "（管理员）" : "")}
+              description="改密码、管理用户，或退出后换个账号登录"
+            >
+              <div class="flex items-center gap-2" data-action="settings-account">
+                <Button type="button" variant="ghost" onClick={() => window.location.assign("/account")}>
+                  账号管理
+                </Button>
+                <form ref={form} method="post" action="/logout" class="contents">
+                  <Button
+                    type="button"
+                    variant="ghost-danger"
+                    data-action="settings-logout"
+                    onClick={() => {
+                      if (window.confirm("确定退出登录？")) form?.submit()
+                    }}
+                  >
+                    退出登录
+                  </Button>
+                </form>
+              </div>
+            </SettingsRow>
+          </SettingsList>
+        </div>
+      )}
+    </Show>
+  )
+}
+
 export const SettingsGeneral: Component = () => {
   const language = useLanguage()
   const platform = usePlatform()
@@ -316,6 +363,9 @@ export const SettingsGeneral: Component = () => {
         </div>
       </div>
       <div class="settings-tab-body settings-tab-body--sectioned">
+        <Show when={platform.platform === "web"}>
+          <AccountSection />
+        </Show>
         <GeneralSection />
 
         <section class="settings-section" aria-label={language.t("settings.timeline.title")}>
