@@ -21,15 +21,15 @@ v2.2.1 相对 1.19.5 的部署要点：
 
 ## 准备前端发布包
 
-建议在本 fork 发布独立标签 **v2.2.1-manatsu.7**，上传：
+建议在本 fork 发布独立标签 **v2.2.1-manatsu.8**，上传：
 
-- `opencode-web-v2.2.1-manatsu.7.tar.gz`
-- `opencode-web-v2.2.1-manatsu.7.tar.gz.sha256`
-- `opencode-deploy-v2.2.1-manatsu.7.tar.gz`（完整部署脚本，无需构建工具）
-- `opencode-deploy-v2.2.1-manatsu.7.tar.gz.sha256`
+- `opencode-web-v2.2.1-manatsu.8.tar.gz`
+- `opencode-web-v2.2.1-manatsu.8.tar.gz.sha256`
+- `opencode-deploy-v2.2.1-manatsu.8.tar.gz`（完整部署脚本，无需构建工具）
+- `opencode-deploy-v2.2.1-manatsu.8.tar.gz.sha256`
 - 中文发布说明 `RELEASE_NOTES.zh-CN.md`
 
-默认安装器从 `https://github.com/manatsu525/opencode/releases/download/v2.2.1-manatsu.7/` 下载部署包、前端包和各自 SHA256，校验后执行/安装。此 release 已发布；后续更新需重新构建并同时替换上述四个包/校验文件，避免旧脚本与新前端混用。tar 根目录必须直接包含 `index.html`、`_assets/`；`FRONTEND_BUILD.json` 记录前端源码 commit。每个新包的精确源码 SHA 以 `FRONTEND_BUILD.json` / `deploy/DEPLOY_BUILD.json` 为准。
+默认安装器从 `https://github.com/manatsu525/opencode/releases/download/v2.2.1-manatsu.8/` 下载部署包、前端包和各自 SHA256，校验后执行/安装。此 release 已发布；后续更新需重新构建并同时替换上述四个包/校验文件，避免旧脚本与新前端混用。tar 根目录必须直接包含 `index.html`、`_assets/`；`FRONTEND_BUILD.json` 记录前端源码 commit。每个新包的精确源码 SHA 以 `FRONTEND_BUILD.json` / `deploy/DEPLOY_BUILD.json` 为准。
 
 自己构建时，在构建机（而不是生产 VM）使用仓库指定的 Bun 版本：
 
@@ -38,8 +38,8 @@ bun install --frozen-lockfile --ignore-scripts
 # 只构建前端，绝不运行后端 build 脚本
 env -u SENTRY_AUTH_TOKEN -u SENTRY_ORG -u SENTRY_PROJECT bun run --cwd packages/app build
 # 发布包不含 source map、sw.js（nginx 对 /sw.js 返回 404）和 _headers
-tar -czf opencode-web-v2.2.1-manatsu.7.tar.gz -C packages/app/dist --exclude='*.map' --exclude=./sw.js --exclude=./_headers .
-sha256sum opencode-web-v2.2.1-manatsu.7.tar.gz > opencode-web-v2.2.1-manatsu.7.tar.gz.sha256
+tar -czf opencode-web-v2.2.1-manatsu.8.tar.gz -C packages/app/dist --exclude='*.map' --exclude=./sw.js --exclude=./_headers .
+sha256sum opencode-web-v2.2.1-manatsu.8.tar.gz > opencode-web-v2.2.1-manatsu.8.tar.gz.sha256
 ```
 
 不要打包 `.env`、真实 auth.json、密码或私钥。安装器固定发布标签，不盲目信任 latest；SHA256 防止传输损坏，来源真实性仍依赖受信 GitHub 账号/HTTPS，不能把同站下载的摘要当独立数字签名。
@@ -57,7 +57,7 @@ curl -fsSL https://raw.githubusercontent.com/manatsu525/opencode/manatsu/v2.2.1/
 已有本地可信包或离线安装仍可显式指定（前端路径与 SHA256 必须同时提供）：
 
 ```sh
-sudo bash deploy/install.sh --host YOUR_IP_OR_DOMAIN --frontend-archive /path/to/opencode-web-v2.2.1-manatsu.7.tar.gz --frontend-sha256 YOUR_64_HEX_SHA256
+sudo bash deploy/install.sh --host YOUR_IP_OR_DOMAIN --frontend-archive /path/to/opencode-web-v2.2.1-manatsu.8.tar.gz --frontend-sha256 YOUR_64_HEX_SHA256
 ```
 
 未指定本地前端时自动下载 release 中的预构建前端及 `.sha256` 并校验，不在目标机编译。`OPENCODE_RELEASE_BASE_URL` / `OPENCODE_BACKEND_BASE_URL` 仅供显式选择可信镜像/离线回归；默认分别是本 fork 固定 release 和官方 v2.2.1 release。官方二进制始终额外匹配仓库固定摘要。覆盖部署包镜像代表信任其可执行脚本，切勿用不可信镜像。
