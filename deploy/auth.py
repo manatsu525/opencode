@@ -208,6 +208,9 @@ def make_server(address, username, password, origin, folder, workspace=None, bac
             except http.cookies.CookieError:return ''
         def same_origin(self):
             supplied=self.headers.get('X-Original-Origin') or self.headers.get('Origin')
+            # Pages served with Referrer-Policy: no-referrer (e.g. /account) make browsers send `Origin: null` on
+            # form POSTs; accept that only when the browser itself vouches the request is same-origin.
+            if supplied=='null':return self.headers.get('Sec-Fetch-Site')=='same-origin'
             return not supplied or hmac.compare_digest(supplied,origin)
         def current(self):
             """The signed-in user that still exists, or None."""
@@ -338,7 +341,7 @@ def make_server(address, username, password, origin, folder, workspace=None, bac
             path=urllib.parse.urlsplit(self.path).path
             if path=='/files/delete':self.delete_file();return
             if path=='/account/api':self.account();return
-            if not self.same_origin():self.reply(403);return
+            if not self.same_origin():self.reply(403,'请求来源校验失败，请返回页面刷新后重试。'.encode(),{'Content-Type':'text/plain; charset=utf-8'});return
             if path=='/logout':
                 sessions.revoke(self.token());self.reply(303,headers={'Set-Cookie':cookie('',0),'Location':'/login'});return
             if path!='/login':self.reply(404);return

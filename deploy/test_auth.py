@@ -60,6 +60,10 @@ class AuthTests(unittest.TestCase):
         for value in ('https://evil.example/','//evil.example/','/\\evil.example/','/\r\ninvalid','/%2fevil.example/','/login','/logout'):
             self.assertEqual(self.login(next=value)[1]['Location'],'/')
         self.assertEqual(self.login(next='/project/session')[1]['Location'],'/project/session')
+    def test_logout_null_origin(self):
+        token=self.token()
+        status,headers,body=self.request('/logout','POST','',{'Cookie':token,'Origin':'null','Sec-Fetch-Site':'cross-site'});self.assertEqual(status,403);self.assertIn('text/plain',headers['Content-Type']);self.assertNotEqual(self.request(headers={'Cookie':token})[0],401)
+        status,headers,_=self.request('/logout','POST','',{'Cookie':token,'Origin':'null','Sec-Fetch-Site':'same-origin'});self.assertEqual(status,303);self.assertIn('Max-Age=0',headers['Set-Cookie']);self.assertEqual(self.request(headers={'Cookie':token})[0],401)
     def test_logout(self):
         token=self.token();status,headers,_=self.request('/logout','POST','',{'Cookie':token,'Origin':'https://test.example:8558'});self.assertEqual(status,303);self.assertIn('Max-Age=0',headers['Set-Cookie']);self.assertEqual(self.request(headers={'Cookie':token})[0],401)
     def test_basic_browser_upgrade(self):
