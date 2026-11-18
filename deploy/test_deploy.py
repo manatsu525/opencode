@@ -27,6 +27,7 @@ with tempfile.TemporaryDirectory(prefix="opencode-deploy-test-") as temp:
     check("nginx streams authenticated /files routes via sidecar", "location ~ ^/files/(list|download|info|delete)$" in nginx_conf and "proxy_buffering off" in nginx_conf.split("location ~ ^/files/")[1].split("}")[0] and "location /files/ { return 404; }" in nginx_conf)
     check("nginx proxies only the v2 /api tree and serves /_assets publicly", "location ~ ^/(api)(/|$)" in nginx_conf and "location /_assets/ { auth_request off;" in nginx_conf and "location = /sw.js { return 404; }" in nginx_conf and "|session|" not in nginx_conf)
     check("Go flash output cap via official v2 providers config", fresh["providers"]["opencode-go"]["models"]["deepseek-v4.1-flash"]["limit"]["output"] == 131072)
+    check("host-safety rule in global instructions", "--network host" in (root/"etc/opencode/DELIVERY.md").read_text())
     check("large-task todo rule in global instructions", "todo" in (root/"etc/opencode/DELIVERY.md").read_text())
     check("deploy bundle ships workspace browser modules", (root/"opt/opencode/deploy/workspace_files.py").is_file() and (root/"opt/opencode/deploy/delivery_config.py").is_file())
     legacy=json.loads(config_path.read_text());legacy["enabled_providers"]=["opencode-go"];legacy["disabled_providers"]=["kept"];config_path.write_text(json.dumps(legacy))

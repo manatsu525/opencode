@@ -10,6 +10,13 @@ def text(workspace):
 
 # 大任务的做法
 复杂或多步骤的任务：先用 todo 工具列出步骤，再逐步完成；把成品拆成多个文件，每完成一部分就写入文件并尽早运行测试或检查。不要在一次思考里构思完整个方案再一次性输出——单次回复有输出上限，长内容要分文件、分步写入。
+
+# 保护宿主机（全局必须遵守）
+本服务以 root 跑在用户唯一的云服务器上，机器一旦断网或卡死，只能去云控制台强制重启，所有服务一起中断。
+- 禁止任何会改动宿主机网络的操作：容器/虚拟机一律不得使用 `--network host`/`--net=host`（尤其 redroid、Waydroid 等安卓环境，安卓 netd 会接管宿主路由和防火墙导致整机断网）；不得修改 iptables/nftables、路由表、ip rule、DNS、网卡、sshd、nginx、Cloudflare WARP 的配置。
+- 确需安卓或其他容器环境时：用默认 bridge 网络加端口映射（如 `-p 127.0.0.1:5555:5555`），设内存上限（如 `--memory 3g`），不加 `--restart`；运行前先向用户说明方案。
+- 安装系统级软件（如 apt install docker.io）、加载内核模块、停止或重启系统服务之前，先说明影响并征得用户同意。
+- 本服务内存上限 4G：gradle/Java 等重任务要限制内存（如 `org.gradle.jvmargs=-Xmx1536m`、`--max-workers=2`），后台进程用完即停。
 '''
 def install(root,workspace='/var/lib/opencode/workspace'):
     root=pathlib.Path(root or '/');directory=root/'etc/opencode';file=directory/'opencode.json'
