@@ -294,7 +294,7 @@ def response_headers(referrer):
   add_header X-Content-Type-Options nosniff always;
   add_header Referrer-Policy {referrer} always;
   add_header X-Frame-Options DENY always;
-  add_header Cache-Control no-store always;
+  add_header Cache-Control $opencode_cache_control always;
   add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https: http:; font-src 'self' data:; worker-src 'self' blob:; child-src 'self' blob:; connect-src 'self' blob: WSORIGIN; frame-ancestors 'none'" always;"""
 nginx = """worker_processes 1;
 pid /var/lib/opencode-web/nginx.pid;
@@ -308,8 +308,15 @@ http {
  client_body_temp_path /var/lib/opencode-web/client;
  proxy_temp_path /var/lib/opencode-web/proxy;
  map $http_upgrade $connection_upgrade { default upgrade; '' close; }
+ # Content-hashed build files never change under the same name: let phones keep them.
+ # Everything else (index.html, login, files and the backend) stays no-store.
+ map $uri $opencode_cache_control {
+  default "no-store";
+  ~^/_assets/ "public, max-age=31536000, immutable";
+  ~^/assets/ "public, max-age=86400";
+ }
  server {
-  listen 0.0.0.0:PORT ssl;
+  listen 0.0.0.0:PORT ssl http2;
   server_name HOST;
   ssl_certificate /etc/opencode/tls/cert.pem;
   ssl_certificate_key /etc/opencode/tls/key.pem;
@@ -400,11 +407,12 @@ LOGIN_HEADERS
    proxy_read_timeout 3600s;
    proxy_send_timeout 3600s;
   }
-  location /assets/ { auth_request off; try_files $uri =404; }
-  location /_assets/ { auth_request off; try_files $uri =404; }
+  # Static files only: compress on the fly (backend responses and SSE stay uncompressed for streaming).
+  location /assets/ { auth_request off; gzip on; gzip_vary on; gzip_comp_level 5; gzip_min_length 1024; gzip_types text/css application/javascript application/json image/svg+xml application/wasm font/ttf application/font-sfnt application/x-font-ttf; try_files $uri =404; }
+  location /_assets/ { auth_request off; gzip on; gzip_vary on; gzip_comp_level 5; gzip_min_length 1024; gzip_types text/css application/javascript application/json image/svg+xml application/wasm font/ttf application/font-sfnt application/x-font-ttf; try_files $uri =404; }
   # No offline service worker behind the login gate (the app also unregisters old ones).
   location = /sw.js { return 404; }
-  location / { error_page 401 = /login; try_files $uri /index.html; }
+  location / { error_page 401 = /login; gzip on; gzip_vary on; try_files $uri /index.html; }
  }
 }
 """
