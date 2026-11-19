@@ -1,7 +1,7 @@
 {
   "version": "2.2.1",
-  "release": "v2.2.1-manatsu.11",
-  "sourceCommit": "4e164db2f5318e332729fc0bcfacd4e3e440fe95",
-  "builtAt": "2026-11-18 10:15 CST",
+  "release": "v2.2.1-manatsu.12",
+  "sourceCommit": "9d451d809985cd84a33e16ee46094b0233ba0b87",
+  "builtAt": "2026-11-19 09:25 CST",
   "backend": "unmodified official v2.2.1 release binary; never built here"
 }
